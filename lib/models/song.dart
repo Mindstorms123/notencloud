@@ -128,9 +128,11 @@ class Song {
 
   /// User-friendly title cleaned up from folder prefix numbers (e.g. "001_Alte_Kameraden" -> "Alte Kameraden")
   static String cleanTitleFromFolder(String folderName) {
-    var cleaned = folderName;
-    // Remove leading numbers like 001_ or 12 -
-    cleaned = cleaned.replaceFirst(RegExp(r'^\d+[\s_-]*'), '');
+    var cleaned = folderName.trim();
+    // Only strip ordering numbers with explicit delimiters (e.g. "01_", "001 - ", "01. ")
+    cleaned = cleaned.replaceFirst(RegExp(r'^\d+\s*[\._\-]+\s*'), '');
+    // Strip zero-padded numbering prefixes like "01 Song" or "002 Song"
+    cleaned = cleaned.replaceFirst(RegExp(r'^0\d+\s+'), '');
     // Replace underscores with spaces
     cleaned = cleaned.replaceAll('_', ' ').trim();
     return cleaned.isEmpty ? folderName : cleaned;

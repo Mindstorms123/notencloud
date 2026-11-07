@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notencloud/models/musician_profile.dart';
+import 'package:notencloud/models/song.dart';
+import 'package:notencloud/services/edition_lookup_service.dart';
 import 'package:notencloud/services/voice_matcher.dart';
 
 void main() {
@@ -200,6 +202,36 @@ void main() {
       expect(bestMatch, isNotNull);
       expect(bestMatch!.part.fileName, 'And I Love Her - Trompete 1.pdf');
       expect(bestMatch.quality, MatchQuality.exact);
+    });
+  });
+
+  group('Song title cleaning and EditionLookup tests', () {
+    test('cleanTitleFromFolder preserves titles starting with numbers like 80er or 99', () {
+      expect(Song.cleanTitleFromFolder('80er Kulttour 2'), '80er Kulttour 2');
+      expect(Song.cleanTitleFromFolder('80er KULT(tour)'), '80er KULT(tour)');
+      expect(Song.cleanTitleFromFolder('99 Luftballons'), '99 Luftballons');
+      expect(Song.cleanTitleFromFolder('7 Nation Army'), '7 Nation Army');
+      expect(Song.cleanTitleFromFolder('1984'), '1984');
+
+      // But still cleans ordering prefixes
+      expect(Song.cleanTitleFromFolder('01_Aktuelle Noten'), 'Aktuelle Noten');
+      expect(Song.cleanTitleFromFolder('001 - Alte Kameraden'), 'Alte Kameraden');
+      expect(Song.cleanTitleFromFolder('02. Florentiner Marsch'), 'Florentiner Marsch');
+      expect(Song.cleanTitleFromFolder('03 Florentiner Marsch'), 'Florentiner Marsch');
+    });
+
+    test('EditionLookupService finds verified Rundel edition for 80er Kulttour', () {
+      final ed1 = EditionLookupService.getEdition('80er KULT(tour)');
+      expect(ed1, isNotNull);
+      expect(ed1!.publisher, contains('RUNDEL'));
+      expect(ed1.orderNumber, 'MVSR 2956');
+      expect(ed1.directUrl, contains('rundel.de'));
+
+      final ed2 = EditionLookupService.getEdition('80er Kulttour 2');
+      expect(ed2, isNotNull);
+      expect(ed2!.publisher, contains('RUNDEL'));
+      expect(ed2.orderNumber, 'MVSR 3236');
+      expect(ed2.directUrl, 'https://www.rundel.de/de/item/80er_kulttour_2/MVSR3236');
     });
   });
 }

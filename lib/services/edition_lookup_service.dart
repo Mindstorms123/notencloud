@@ -27,6 +27,44 @@ class EditionInfo {
 class EditionLookupService {
   /// Known verified sheet music editions for pieces in the repertoire
   static final Map<String, EditionInfo> _catalog = {
+    // --- Musikverlag Rundel ---
+    '80er kult(tour)': const EditionInfo(
+      title: '80er KULT(tour)',
+      publisher: 'Musikverlag RUNDEL',
+      arranger: 'Thiemo Kraas',
+      series: 'Blasorchester / Concert Band',
+      orderNumber: 'MVSR 2956',
+      directUrl: 'https://www.rundel.de/de/item/80er_kulttour/MVSR2956',
+      instrumentationNote: 'Vollständige deutsche Blasorchester-Besetzung: Skandal im Sperrbezirk, Ohne dich, 1000 und 1 Nacht, Sternenhimmel, Rock Me Amadeus.',
+    ),
+    '80er kulttour': const EditionInfo(
+      title: '80er KULT(tour)',
+      publisher: 'Musikverlag RUNDEL',
+      arranger: 'Thiemo Kraas',
+      series: 'Blasorchester / Concert Band',
+      orderNumber: 'MVSR 2956',
+      directUrl: 'https://www.rundel.de/de/item/80er_kulttour/MVSR2956',
+      instrumentationNote: 'Vollständige deutsche Blasorchester-Besetzung: Skandal im Sperrbezirk, Ohne dich, 1000 und 1 Nacht, Sternenhimmel, Rock Me Amadeus.',
+    ),
+    '80er kult(tour) 2': const EditionInfo(
+      title: '80er KULT(tour) 2',
+      publisher: 'Musikverlag RUNDEL',
+      arranger: 'Thiemo Kraas',
+      series: 'Blasorchester / Concert Band',
+      orderNumber: 'MVSR 3236',
+      directUrl: 'https://www.rundel.de/de/item/80er_kulttour_2/MVSR3236',
+      instrumentationNote: 'Vollständige deutsche Blasorchester-Besetzung: Dein ist mein ganzes Herz, Wunder gescheh\'n, Verdamp lang her, Major Tom.',
+    ),
+    '80er kulttour 2': const EditionInfo(
+      title: '80er KULT(tour) 2',
+      publisher: 'Musikverlag RUNDEL',
+      arranger: 'Thiemo Kraas',
+      series: 'Blasorchester / Concert Band',
+      orderNumber: 'MVSR 3236',
+      directUrl: 'https://www.rundel.de/de/item/80er_kulttour_2/MVSR3236',
+      instrumentationNote: 'Vollständige deutsche Blasorchester-Besetzung: Dein ist mein ganzes Herz, Wunder gescheh\'n, Verdamp lang her, Major Tom.',
+    ),
+
     // --- 00_Noten Upload & Repertoire (Hal Leonard / Young Concert Band / Discovery Series) ---
     'aladdin': const EditionInfo(
       title: 'Aladdin',
