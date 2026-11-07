@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/nextcloud_account.dart';
 import '../../services/nextcloud_service.dart';
@@ -40,7 +41,63 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       _serverUrlController.text = _defaultServerUrl;
     }
+    
+    // Check initial deep link
+    final initialRoute = WidgetsBinding.instance.platformDispatcher.defaultRouteName;
+    if (initialRoute.contains('notencloud://') || initialRoute.contains('server=')) {
+      _parseAndApplyLinkOrText(initialRoute);
+    }
+
     _checkClipboardForServerUrl();
+  }
+
+  void _parseAndApplyLinkOrText(String input) {
+    var handled = false;
+    // 1. Check for deep link URI: notencloud://setup?server=...&folder=...
+    final uri = Uri.tryParse(input);
+    if (uri != null && uri.scheme == 'notencloud') {
+      final s = uri.queryParameters['server'];
+      final f = uri.queryParameters['folder'];
+      if (s != null && s.isNotEmpty) {
+        _serverUrlController.text = s;
+        handled = true;
+      }
+      if (f != null && f.isNotEmpty) {
+        _rootFolderController.text = f;
+        handled = true;
+      }
+    }
+
+    // 2. Check for explicit Server: and Notenordner: text
+    final serverMatch = RegExp(r'(?:server(?:\-url)?|adresse):\s*(https?://[^\s\n]+)', caseSensitive: false).firstMatch(input);
+    if (serverMatch != null) {
+      _serverUrlController.text = serverMatch.group(1)!.trim();
+      handled = true;
+    }
+
+    final folderMatch = RegExp(r'(?:notenordner|ordner|folder):\s*(/[^\s\n]*)', caseSensitive: false).firstMatch(input);
+    if (folderMatch != null) {
+      _rootFolderController.text = folderMatch.group(1)!.trim();
+      handled = true;
+    }
+
+    // 3. Fallback: Any http/https link with cloud/orchester/nextcloud
+    if (!handled) {
+      final urlMatch = RegExp(r'(https?://[^\s\n]+)').firstMatch(input);
+      if (urlMatch != null) {
+        final url = urlMatch.group(0)!.trim();
+        if (url.contains('cloud') || url.contains('nextcloud') || url.contains('orchester') || url.contains('noten')) {
+          _serverUrlController.text = url;
+          handled = true;
+        }
+      }
+    }
+
+    if (handled && mounted) {
+      setState(() {
+        _clipboardDetected = true;
+      });
+    }
   }
 
   @override
@@ -57,22 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null && text.isNotEmpty) {
-        final urlRegex = RegExp(r'(https?://[^\s]+)');
-        final match = urlRegex.firstMatch(text);
-        if (match != null) {
-          final foundUrl = match.group(0)!;
-          if (foundUrl.contains('cloud') ||
-              foundUrl.contains('nextcloud') ||
-              foundUrl.contains('orchester') ||
-              foundUrl.contains('noten')) {
-            if (mounted) {
-              setState(() {
-                _serverUrlController.text = foundUrl;
-                _clipboardDetected = true;
-              });
-            }
-          }
-        }
+        _parseAndApplyLinkOrText(text);
       }
     } catch (_) {}
   }
@@ -82,24 +124,37 @@ class _LoginScreenState extends State<LoginScreen> {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null && text.isNotEmpty) {
-        final urlRegex = RegExp(r'(https?://[^\s]+)');
-        final match = urlRegex.firstMatch(text);
-        final urlToUse = match != null ? match.group(0)! : text;
-        setState(() {
-          _serverUrlController.text = urlToUse;
-          _clipboardDetected = true;
-        });
+        _parseAndApplyLinkOrText(text);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: AppTheme.emerald,
-              content: Text('Server-Adresse aus Zwischenablage eingefügt!'),
+              content: Text('Einrichtungs-Link aus Zwischenablage übernommen!'),
               duration: Duration(seconds: 2),
             ),
           );
         }
       }
     } catch (_) {}
+  }
+
+  void _shareSetupLink() {
+    final rawUrl = _serverUrlController.text.trim();
+    final serverUrl = rawUrl.isNotEmpty ? rawUrl : _defaultServerUrl;
+    final folder = _rootFolderController.text.trim().isNotEmpty
+        ? _rootFolderController.text.trim()
+        : '/Noten';
+
+    final setupLink = 'notencloud://setup?server=${Uri.encodeQueryComponent(serverUrl)}&folder=${Uri.encodeQueryComponent(folder)}';
+
+    final shareText = '🎵 Blasorchester Notencloud Einrichtung:\n\n'
+        'Tippe auf den Einrichtungs-Link, um Notencloud automatisch mit unserem Archiv zu verbinden:\n'
+        '$setupLink\n\n'
+        '(Alternativ: Server: $serverUrl | Notenordner: $folder)\n\n'
+        'Anschließend in der App einfach auf "Im Browser anmelden" tippen – fertig!';
+
+    Clipboard.setData(ClipboardData(text: setupLink));
+    SharePlus.instance.share(ShareParams(text: shareText, subject: 'Notencloud Einrichtung'));
   }
 
   Future<void> _startBrowserLoginFlow() async {
@@ -427,10 +482,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           hintText: 'https://cloud.mein-orchester.de',
                           prefixIcon: const Icon(Icons.dns_rounded, size: 20),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.content_paste_rounded, size: 18),
-                            tooltip: 'Aus Zwischenablage einfügen',
-                            onPressed: _pasteFromClipboard,
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.content_paste_rounded, size: 18),
+                                tooltip: 'Aus Zwischenablage einfügen',
+                                onPressed: _pasteFromClipboard,
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.share_rounded, size: 18),
+                                tooltip: 'Einrichtungs-Link teilen',
+                                onPressed: _shareSetupLink,
+                              ),
+                            ],
                           ),
                           helperText: 'Server-Adresse deiner Vereins-Nextcloud',
                           helperStyle: const TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),

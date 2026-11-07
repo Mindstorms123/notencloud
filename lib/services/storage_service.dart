@@ -7,6 +7,7 @@ import '../models/musician_profile.dart';
 import '../models/nextcloud_account.dart';
 import '../models/song.dart';
 import '../models/setlist.dart';
+import 'voice_matcher.dart';
 
 class StorageService {
   static const _prefProfileKey = 'musician_profile';
@@ -108,7 +109,22 @@ class StorageService {
     if (jsonStr == null) return [];
     try {
       final list = jsonDecode(jsonStr) as List<dynamic>;
-      return list.map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
+      final songs = list.map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
+      return songs.map((song) {
+        final sanitizedParts = song.parts.map((p) {
+          final inst = p.detectedInstrument.trim();
+          if (VoiceMatcher.knownRealInstruments.contains(inst) ||
+              inst == 'Partitur' ||
+              inst == 'Direktion' ||
+              inst == 'Zusatzstimme' ||
+              inst == 'Dokument') {
+            return p;
+          }
+          // Legacy/bogus instrument name (e.g. "Wonderful Christmas") -> sanitize to Zusatzstimme
+          return p.copyWith(detectedInstrument: 'Zusatzstimme');
+        }).toList();
+        return song.copyWith(parts: sanitizedParts);
+      }).toList();
     } catch (_) {
       return [];
     }

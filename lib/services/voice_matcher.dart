@@ -61,7 +61,8 @@ class VoiceMatcher {
     'baritonsaxophon': ['baritonsaxophon', 'baritonsax', 'bariton sax', 'baritone sax', 'baritone saxophone'],
     'trompete': ['trompete', 'trompe', 'trumpet', 'trompette', 'b trompete', 'bb trumpet', 'trpt'],
     'flügelhorn': ['fluegelhorn', 'flugelhorn', 'fluegel', 'b fluegelhorn'],
-    'waldhorn': ['waldhorn', 'horn', 'f horn', 'french horn', 'es horn', 'in f', 'in es'],
+    'kornett': ['kornett', 'cornet', 'cornett'],
+    'waldhorn': ['waldhorn', 'horn', 'f horn', 'french horn', 'es horn'],
     'posaune': ['posaune', 'posauen', 'trombone', 'tbne', 'bassposaune', 'tenorposaune'],
     'tenorhorn': ['tenorhorn', 'tenor horn', 'tenorhorn in b'],
     'bariton': ['bariton', 'baritone', 'bariton in b', 'bariton in c'],
@@ -82,6 +83,82 @@ class VoiceMatcher {
     'kontrabass': ['kontrabass', 'double bass', 'string bass'],
     'partitur': ['partitur', 'patitur', 'patitiur', 'full score', 'score', 'condensed score', 'gesamt', 'stimmen tutti', 'tutti'],
     'direktion': ['direktion', 'direktion in c', 'direktion in b', 'conductor', 'lead sheet'],
+  };
+
+  /// Canonical display names with correct capitalization and hyphens
+  static const Map<String, String> canonicalDisplayNames = {
+    'flöte': 'Flöte',
+    'piccoloflöte': 'Piccoloflöte',
+    'oboe': 'Oboe',
+    'fagott': 'Fagott',
+    'es-klarinette': 'Es-Klarinette',
+    'klarinette': 'Klarinette',
+    'bassklarinette': 'Bassklarinette',
+    'sopransaxophon': 'Sopransaxophon',
+    'altsaxophon': 'Altsaxophon',
+    'tenorsaxophon': 'Tenorsaxophon',
+    'baritonsaxophon': 'Baritonsaxophon',
+    'trompete': 'Trompete',
+    'flügelhorn': 'Flügelhorn',
+    'kornett': 'Kornett',
+    'waldhorn': 'Waldhorn',
+    'posaune': 'Posaune',
+    'tenorhorn': 'Tenorhorn',
+    'bariton': 'Bariton',
+    'euphonium': 'Euphonium',
+    'tuba': 'Tuba',
+    'schlagzeug': 'Schlagzeug',
+    'pauken': 'Pauken',
+    'percussion': 'Percussion',
+    'glockenspiel': 'Glockenspiel',
+    'klavier': 'Klavier',
+    'gitarre': 'Gitarre',
+    'e-bass': 'E-Bass',
+    'gesang': 'Gesang',
+    'harfe': 'Harfe',
+    'violine': 'Violine',
+    'viola': 'Viola',
+    'violoncello': 'Violoncello',
+    'kontrabass': 'Kontrabass',
+    'partitur': 'Partitur',
+    'direktion': 'Direktion',
+  };
+
+  /// Set of verified, genuine orchestral instruments selectable by musicians
+  static const Set<String> knownRealInstruments = {
+    'Piccoloflöte',
+    'Flöte',
+    'Oboe',
+    'Fagott',
+    'Es-Klarinette',
+    'Klarinette',
+    'Bassklarinette',
+    'Sopransaxophon',
+    'Altsaxophon',
+    'Tenorsaxophon',
+    'Baritonsaxophon',
+    'Trompete',
+    'Flügelhorn',
+    'Kornett',
+    'Waldhorn',
+    'Tenorhorn',
+    'Bariton',
+    'Euphonium',
+    'Posaune',
+    'Tuba',
+    'E-Bass',
+    'Kontrabass',
+    'Schlagzeug',
+    'Pauken',
+    'Percussion',
+    'Glockenspiel',
+    'Klavier',
+    'Gitarre',
+    'Gesang',
+    'Harfe',
+    'Violine',
+    'Viola',
+    'Violoncello',
   };
 
   /// Analyzes a PDF file name and detects instrument, voice number, and key.
@@ -168,12 +245,11 @@ class VoiceMatcher {
       }
     }
 
-    // Capitalize canonical instrument for display, or mark as Zusatzstimme if unrecognized
+    // MUST be a recognized canonical instrument, otherwise Zusatzstimme (never random titles/hints!)
     final displayInstrument = detectedInstrument.isNotEmpty
-        ? detectedInstrument[0].toUpperCase() + detectedInstrument.substring(1)
-        : (instrumentHint.isNotEmpty
-            ? instrumentHint[0].toUpperCase() + instrumentHint.substring(1)
-            : 'Zusatzstimme');
+        ? (canonicalDisplayNames[detectedInstrument] ??
+            detectedInstrument[0].toUpperCase() + detectedInstrument.substring(1))
+        : 'Zusatzstimme';
 
     return PartFile(
       id: '$songId-$cleanName',
@@ -331,18 +407,8 @@ class VoiceMatcher {
     for (final s in songs) {
       for (final p in s.parts) {
         final inst = p.detectedInstrument.trim();
-        if (inst.isNotEmpty &&
-            inst != 'Zusatzstimme' &&
-            inst != 'Dokument' &&
-            inst != 'Partitur' &&
-            inst != 'Direktion' &&
-            !inst.contains('.pdf') &&
-            !inst.contains('/') &&
-            !inst.contains(' - ') &&
-            !inst.contains('(') &&
-            !inst.contains(')') &&
-            !inst.toLowerCase().contains('stimmen') &&
-            inst.length < 24) {
+        // Strict verification: ONLY include verified real instruments!
+        if (knownRealInstruments.contains(inst)) {
           discovered.add(inst);
         }
       }
@@ -367,7 +433,6 @@ class VoiceMatcher {
     }
 
     const standardOrder = [
-      'Partitur', 'Direktion',
       'Piccoloflöte', 'Flöte', 'Oboe', 'Fagott',
       'Es-Klarinette', 'Klarinette', 'Bassklarinette',
       'Sopransaxophon', 'Altsaxophon', 'Tenorsaxophon', 'Baritonsaxophon',
@@ -378,6 +443,7 @@ class VoiceMatcher {
       'Tuba', 'E-Bass', 'Kontrabass',
       'Schlagzeug', 'Pauken', 'Percussion', 'Glockenspiel',
       'Klavier', 'Gitarre', 'Gesang', 'Harfe',
+      'Violine', 'Viola', 'Violoncello',
     ];
 
     final sorted = discovered.toList()

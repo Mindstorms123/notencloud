@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
@@ -277,21 +278,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ? _rootFolderController.text.trim()
         : '/Noten';
 
-    final text = '🎵 Blasorchester Notencloud Einrichtung:\n\n'
-        '1. Notencloud-App installieren\n'
-        '2. In den Einstellungen auf "Im Browser anmelden" tippen\n'
-        '3. Server-URL: $server\n'
-        '4. Notenordner: $folder\n'
-        '5. Auf "Zugriff gewähren" tippen – fertig!';
+    final setupLink = 'notencloud://setup?server=${Uri.encodeQueryComponent(server)}&folder=${Uri.encodeQueryComponent(folder)}';
 
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: AppTheme.emerald,
-        content: Text('Einrichtungs-Info kopiert! Kann per WhatsApp / Signal geteilt werden.'),
-        duration: Duration(seconds: 3),
-      ),
-    );
+    final text = '🎵 Blasorchester Notencloud Einrichtung:\n\n'
+        'Tippe auf den Einrichtungs-Link, um Notencloud automatisch mit unserem Archiv zu verbinden:\n'
+        '$setupLink\n\n'
+        '(Alternativ: Server: $server | Notenordner: $folder)\n\n'
+        'Anschließend in der App einfach auf "Im Browser anmelden" tippen – fertig!';
+
+    Clipboard.setData(ClipboardData(text: setupLink));
+    SharePlus.instance.share(ShareParams(text: text, subject: 'Notencloud Einrichtung'));
   }
 
   void _showGuidelineDialog() {
