@@ -231,7 +231,7 @@ void main() {
       expect(ed2, isNotNull);
       expect(ed2!.publisher, contains('RUNDEL'));
       expect(ed2.orderNumber, 'MVSR 3236');
-      expect(ed2.directUrl, 'https://www.rundel.de/de/item/80er_kulttour_2/MVSR3236');
+      expect(ed2.directUrl, 'https://www.rundel.de/de/artikel/80er_kult_tour_2/MVSR3236');
     });
   });
 }
