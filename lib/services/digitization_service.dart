@@ -121,6 +121,23 @@ class DigitizationService {
     StandardPartRequirement(instrument: 'Partitur', voiceNumber: 0, isCore: true),
   ];
 
+  /// Checks if an instrument in the part satisfies a standard requirement
+  static bool areInstrumentsCompatible(String partInstrument, String requiredInstrument) {
+    final p = partInstrument.toLowerCase();
+    final r = requiredInstrument.toLowerCase();
+    if (p == r) return true;
+
+    // Kornett / Cornet satisfies Trompete
+    if ((p == 'kornett' || p == 'cornet') && r == 'trompete') return true;
+    if (p == 'trompete' && (r == 'kornett' || r == 'cornet')) return true;
+
+    // Euphonium satisfies Bariton / Tenorhorn
+    if (p == 'euphonium' && (r == 'bariton' || r == 'tenorhorn')) return true;
+    if ((p == 'bariton' || p == 'tenorhorn') && r == 'euphonium') return true;
+
+    return false;
+  }
+
   /// Analyzes a single song and identifies missing parts and voice gaps
   static SongDigitizationReport analyzeSong(
     Song song, {
@@ -190,7 +207,7 @@ class DigitizationService {
         bool isCovered = false;
 
         for (final p in song.parts) {
-          if (p.detectedInstrument.toLowerCase() == req.instrument.toLowerCase()) {
+          if (areInstrumentsCompatible(p.detectedInstrument, req.instrument)) {
             if (req.voiceNumber == 0) {
               isCovered = true;
               break;
@@ -312,9 +329,11 @@ class DigitizationService {
 
     final buffer = StringBuffer();
     final dateStr = DateFormat('dd.MM.yyyy').format(DateTime.now());
+    final summary = calculateSummary(reports);
 
     buffer.writeln('📋 *Notencloud - Fehlende Noten zum Digitalisieren*');
-    buffer.writeln('Stand: $dateStr • ${filtered.length} unvollständige Stücke\n');
+    buffer.writeln('Stand: $dateStr • Gesamt-Digitalisierung: ${summary.overallPercentage.round()}%');
+    buffer.writeln('${filtered.length} unvollständige Stücke\n');
 
     if (categoryFilter != null && categoryFilter.isNotEmpty && categoryFilter != 'Alle Kategorien') {
       buffer.writeln('Kategorie: $categoryFilter\n');
@@ -385,8 +404,9 @@ class DigitizationService {
     );
 
     final dateStr = DateFormat('dd.MM.yyyy').format(DateTime.now());
+    final summary = calculateSummary(reports);
     page.graphics.drawString(
-      '$orchestraName • Stand: $dateStr • ${filtered.length} unvollständige Stücke',
+      '$orchestraName • Stand: $dateStr • Gesamt-Score: ${summary.overallPercentage.round()}% • ${filtered.length} unvollständige Stücke',
       subtitleFont,
       brush: PdfSolidBrush(PdfColor(224, 231, 255)),
       bounds: Rect.fromLTWH(14, 32, pageWidth - 28, 16),

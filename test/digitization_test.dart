@@ -81,6 +81,21 @@ void main() {
       expect(report.completionPercentage, lessThan(100.0));
     });
 
+    test('considers Life on Mars Bb Trumpet Cornet I as covering Trompete 1', () {
+      final song = createSampleSong(
+        title: 'Life on Mars',
+        category: 'Rock',
+        fileNames: [
+          'LIFE ON MARS - Bb Trumpet Cornet I.pdf',
+        ],
+      );
+
+      final report = DigitizationService.analyzeSong(song, mode: AuditMode.standardBesetzung);
+      // Trompete 1 (Bb) should NOT be missing because 'Bb Trumpet Cornet I' is present!
+      expect(report.missingParts, isNot(contains('Trompete 1 (Bb)')));
+      expect(report.presentParts, contains('Trompete 1 in Bb'));
+    });
+
     test('ignores documents and setlists as already complete', () {
       final docSong = Song(
         id: 'doc_1',
@@ -134,6 +149,7 @@ void main() {
       final text = DigitizationService.generateShareText(reports);
 
       expect(text, contains('Fehlende Noten zum Digitalisieren'));
+      expect(text, contains('Gesamt-Digitalisierung'));
       expect(text, contains('Alte Kameraden'));
       expect(text, contains('Trompete 2'));
     });
@@ -170,6 +186,7 @@ void main() {
 
       // Check title & stats bar
       expect(find.text('Digitalisierungs-Check'), findsOneWidget);
+      expect(find.text('Gesamt-Digitalisierungsscore'), findsOneWidget);
       expect(find.text('Stücke'), findsOneWidget);
       expect(find.text('Vollständig'), findsOneWidget);
       expect(find.text('Unvollständig'), findsOneWidget);
@@ -184,6 +201,43 @@ void main() {
       // Check modal content (FEHLENDE STIMMEN is at the top of the modal)
       expect(find.textContaining('FEHLENDE STIMMEN'), findsOneWidget);
       expect(find.text('Noch einscannen'), findsWidgets);
+    });
+
+    testWidgets('prioritizes selected instrument missing parts to the very front', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      addTearDown(() async => await tester.binding.setSurfaceSize(null));
+
+      final song = createSampleSong(
+        title: 'Medley 2026',
+        category: 'Modern',
+        fileNames: [
+          'Altsaxophon 1.pdf',
+          'Flöte 2.pdf', // Flöte 1 missing
+          'Trompete 1 in Bb.pdf',
+          'Trompete 3 in Bb.pdf', // Trompete 2 missing
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DigitizationAuditScreen(
+            allSongs: [song],
+            storageService: storageService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap 'Alle Instrumente' dropdown to open choices
+      await tester.tap(find.text('Alle Instrumente'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Trompete').last);
+      await tester.pumpAndSettle();
+
+      // Star icon should appear for prioritized instrument
+      expect(find.byIcon(Icons.star_rounded), findsWidgets);
+      expect(find.text('Fehlt: Trompete 2 (Bb)'), findsOneWidget);
     });
   });
 }

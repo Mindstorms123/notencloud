@@ -107,6 +107,27 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
     }).toList();
   }
 
+  /// Sorts missing parts so that parts matching the selected instrument filter are prioritized to the front
+  List<String> _getSortedMissingParts(List<String> missingParts) {
+    if (_selectedInstrument == 'Alle Instrumente' || missingParts.isEmpty) {
+      return missingParts;
+    }
+
+    final query = _selectedInstrument.toLowerCase();
+    final matching = <String>[];
+    final other = <String>[];
+
+    for (final m in missingParts) {
+      if (m.toLowerCase().contains(query)) {
+        matching.add(m);
+      } else {
+        other.add(m);
+      }
+    }
+
+    return [...matching, ...other];
+  }
+
   Future<void> _shareText() async {
     final text = DigitizationService.generateShareText(
       _filteredReports,
@@ -278,23 +299,45 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: r.missingParts.map((m) {
+                        children: _getSortedMissingParts(r.missingParts).map((m) {
+                          final isTarget = _selectedInstrument != 'Alle Instrumente' &&
+                              m.toLowerCase().contains(_selectedInstrument.toLowerCase());
+
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Row(
                               children: [
-                                const Icon(Icons.close_rounded, size: 16, color: AppTheme.rose),
+                                Icon(
+                                  isTarget ? Icons.star_rounded : Icons.close_rounded,
+                                  size: 16,
+                                  color: isTarget ? AppTheme.amber : AppTheme.rose,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(m, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                                  child: Text(
+                                    m,
+                                    style: TextStyle(
+                                      color: isTarget ? AppTheme.amber : Colors.white,
+                                      fontWeight: isTarget ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.rose.withValues(alpha: 0.2),
+                                    color: (isTarget ? AppTheme.amber : AppTheme.rose).withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(6),
+                                    border: isTarget ? Border.all(color: AppTheme.amber.withValues(alpha: 0.5)) : null,
                                   ),
-                                  child: const Text('Noch einscannen', style: TextStyle(color: AppTheme.rose, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  child: Text(
+                                    isTarget ? 'Ausgewähltes Instrument' : 'Noch einscannen',
+                                    style: TextStyle(
+                                      color: isTarget ? AppTheme.amber : AppTheme.rose,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -390,19 +433,107 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
       ),
       body: Column(
         children: [
-          // 1. Stats Bar (Summary)
+          // 1. Overall Score & Stats Card
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
             decoration: const BoxDecoration(
               color: AppTheme.darkSurface,
               border: Border(bottom: BorderSide(color: AppTheme.darkBorder)),
             ),
-            child: Row(
+            child: Column(
               children: [
-                _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white),
-                _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald),
-                _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber),
-                _buildStatItem('Fehlt gesamt', '${_summary.totalMissingParts}', AppTheme.rose),
+                // Prominent Overall Digitization Score Card
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.darkCard,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.darkBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: (_summary.overallPercentage >= 80
+                                  ? AppTheme.emerald
+                                  : (_summary.overallPercentage >= 50
+                                      ? AppTheme.amber
+                                      : AppTheme.rose))
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.pie_chart_rounded,
+                          size: 20,
+                          color: _summary.overallPercentage >= 80
+                              ? AppTheme.emerald
+                              : (_summary.overallPercentage >= 50
+                                  ? AppTheme.amber
+                                  : AppTheme.rose),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Gesamt-Digitalisierungsscore',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                Text(
+                                  '${_summary.overallPercentage.toStringAsFixed(1)}%',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: _summary.overallPercentage >= 80
+                                        ? AppTheme.emerald
+                                        : (_summary.overallPercentage >= 50
+                                            ? AppTheme.amber
+                                            : AppTheme.rose),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: LinearProgressIndicator(
+                                value: (_summary.overallPercentage / 100.0).clamp(0.0, 1.0),
+                                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                                valueColor: AlwaysStoppedAnimation(
+                                  _summary.overallPercentage >= 80
+                                      ? AppTheme.emerald
+                                      : (_summary.overallPercentage >= 50
+                                          ? AppTheme.amber
+                                          : AppTheme.rose),
+                                ),
+                                minHeight: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white),
+                    _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald),
+                    _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber),
+                    _buildStatItem('Fehlt gesamt', '${_summary.totalMissingParts}', AppTheme.rose),
+                  ],
+                ),
               ],
             ),
           ),
@@ -669,40 +800,69 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
 
               if (r.missingParts.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: r.missingParts.take(6).map((m) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.rose.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppTheme.rose.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        'Fehlt: $m',
-                        style: const TextStyle(color: AppTheme.rose, fontSize: 10, fontWeight: FontWeight.w600),
-                      ),
-                    );
-                  }).toList()
-                    ..addAll(
-                      r.missingParts.length > 6
-                          ? [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '+${r.missingParts.length - 6} weitere',
-                                  style: const TextStyle(color: AppTheme.darkTextMuted, fontSize: 10),
-                                ),
+                Builder(
+                  builder: (context) {
+                    final sortedMissing = _getSortedMissingParts(r.missingParts);
+                    final isInstrumentFiltered = _selectedInstrument != 'Alle Instrumente';
+                    final visibleMissing = sortedMissing.take(6).toList();
+                    final remainingCount = sortedMissing.length - visibleMissing.length;
+
+                    return Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ...visibleMissing.map((m) {
+                          final isTarget = isInstrumentFiltered &&
+                              m.toLowerCase().contains(_selectedInstrument.toLowerCase());
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isTarget
+                                  ? AppTheme.amber.withValues(alpha: 0.22)
+                                  : AppTheme.rose.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isTarget
+                                    ? AppTheme.amber
+                                    : AppTheme.rose.withValues(alpha: 0.3),
+                                width: isTarget ? 1.5 : 1.0,
                               ),
-                            ]
-                          : [],
-                    ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isTarget) ...[
+                                  const Icon(Icons.star_rounded, size: 12, color: AppTheme.amber),
+                                  const SizedBox(width: 3),
+                                ],
+                                Text(
+                                  'Fehlt: $m',
+                                  style: TextStyle(
+                                    color: isTarget ? AppTheme.amber : AppTheme.rose,
+                                    fontSize: 10,
+                                    fontWeight: isTarget ? FontWeight.bold : FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        if (remainingCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '+$remainingCount weitere',
+                              style: const TextStyle(color: AppTheme.darkTextMuted, fontSize: 10),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ],

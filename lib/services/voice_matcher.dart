@@ -42,8 +42,8 @@ class VoiceMatcher {
   static String normalize(String input) {
     var s = input.toLowerCase();
     s = s.replaceAll('ä', 'ae').replaceAll('ö', 'oe').replaceAll('ü', 'ue').replaceAll('ß', 'ss');
-    s = s.replaceAll(RegExp(r'[\._\-\+,;]'), ' ');
-    return s.trim();
+    s = s.replaceAll(RegExp(r'[\._\-\+,;/]'), ' ');
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   /// Map common instrument synonyms to a standardized canonical instrument name
@@ -59,14 +59,14 @@ class VoiceMatcher {
     'altsaxophon': ['altsaxophon', 'altsax', 'alt sax', 'alto saxophone', 'alto sax', 'es altsaxophon'],
     'tenorsaxophon': ['tenorsaxophon', 'tenorsax', 'tenor sax', 'tenor saxophone', 'b tenorsaxophon'],
     'baritonsaxophon': ['baritonsaxophon', 'baritonsax', 'bariton sax', 'baritone sax', 'baritone saxophone'],
-    'trompete': ['trompete', 'trompe', 'trumpet', 'trompette', 'b trompete', 'bb trumpet', 'trpt'],
+    'trompete': ['trompete', 'trompe', 'trumpet', 'trompette', 'b trompete', 'bb trumpet', 'trpt', 'cornet', 'kornett', 'cornett'],
     'flügelhorn': ['fluegelhorn', 'flugelhorn', 'fluegel', 'b fluegelhorn'],
-    'kornett': ['kornett', 'cornet', 'cornett'],
+    'kornett': ['kornett', 'cornet', 'cornett', 'trompete', 'trumpet'],
     'waldhorn': ['waldhorn', 'horn', 'f horn', 'french horn', 'es horn'],
     'posaune': ['posaune', 'posauen', 'trombone', 'tbne', 'bassposaune', 'tenorposaune'],
     'tenorhorn': ['tenorhorn', 'tenor horn', 'tenorhorn in b'],
-    'bariton': ['bariton', 'baritone', 'bariton in b', 'bariton in c'],
-    'euphonium': ['euphonium', 'euph'],
+    'bariton': ['bariton', 'baritone', 'bariton in b', 'bariton in c', 'euphonium'],
+    'euphonium': ['euphonium', 'euph', 'bariton', 'baritone'],
     'tuba': ['tuba', 'tuben', 'baesse', 'bässe', 'b tuba', 'c tuba', 'es tuba', 'f tuba', 'sousaphon'],
     'percussion': [
       'percussion', 'perkussion', 'perc', 'perk',
@@ -219,12 +219,15 @@ class VoiceMatcher {
     final normHint = normalize(instrumentHint);
 
     // If the file name has a " - " or " – " separator (SongTitle - PartName), focus voice detection on the part name!
-    String voiceSearchText = norm;
-    if (norm.contains(' - ')) {
-      voiceSearchText = norm.split(' - ').last;
-    } else if (norm.contains(' – ')) {
-      voiceSearchText = norm.split(' – ').last;
+    String partSegment = cleanName;
+    if (cleanName.contains(' - ')) {
+      partSegment = cleanName.split(' - ').last;
+    } else if (cleanName.contains(' – ')) {
+      partSegment = cleanName.split(' – ').last;
+    } else if (cleanName.contains(' — ')) {
+      partSegment = cleanName.split(' — ').last;
     }
+    final voiceSearchText = normalize(partSegment);
 
     // 1. Detect voice numbers
     int voice = 0;
@@ -240,9 +243,9 @@ class VoiceMatcher {
       isCombined = true;
       voice = 3;
     } else {
-      // 1. Check instrument- or voice-adjacent number (e.g. "Trompete 2", "2. Trompete", "Flöte II", "Stimme 1")
+      // 1. Check instrument- or voice-adjacent number (e.g. "Trompete 2", "2. Trompete", "Flöte II", "Cornet I", "Stimme 1")
       final adjMatch = RegExp(
-        r'(?:trompete|trumpet|flöte|flute|klarinette|clarinet|sax|posaune|trombone|horn|tuba|stimme|voice|part)\s*([1-9]|iv|iii|ii|i)\b',
+        r'(?:trompete|trumpet|cornet|kornett|fluegelhorn|flügelhorn|flöte|flute|klarinette|clarinet|sax|posaune|trombone|horn|tenorhorn|bariton|baritone|euphonium|tuba|stimme|voice|part)\s*([1-9]|iv|iii|ii|i)\b',
       ).firstMatch(voiceSearchText);
       if (adjMatch != null) {
         final v = adjMatch.group(1)!;
@@ -261,7 +264,7 @@ class VoiceMatcher {
 
       if (voice == 0) {
         final preMatch = RegExp(
-          r'\b([1-9]|iv|iii|ii|i)(?:\.|\s*st|\s*nd|\s*rd|\s*th)?\s*(?:trompete|trumpet|flöte|flute|klarinette|clarinet|sax|posaune|trombone|horn|tuba|stimme|voice|part)',
+          r'\b([1-9]|iv|iii|ii|i)(?:\.|\s*st|\s*nd|\s*rd|\s*th)?\s*(?:trompete|trumpet|cornet|kornett|fluegelhorn|flügelhorn|flöte|flute|klarinette|clarinet|sax|posaune|trombone|horn|tenorhorn|bariton|baritone|euphonium|tuba|stimme|voice|part)',
         ).firstMatch(voiceSearchText);
         if (preMatch != null) {
           final v = preMatch.group(1)!;
@@ -296,7 +299,8 @@ class VoiceMatcher {
         } else if (RegExp(r'\bii\b').hasMatch(voiceSearchText)) {
           voice = 2;
         } else if (RegExp(r'\b(i\.|\bstimme\s+i\b|\bpart\s+i\b)').hasMatch(voiceSearchText) ||
-            (voiceSearchText != norm && RegExp(r'\bi\b').hasMatch(voiceSearchText))) {
+            (voiceSearchText != norm && RegExp(r'\bi\b').hasMatch(voiceSearchText)) ||
+            RegExp(r'(?:trompete|trumpet|cornet|kornett|horn|flöte|flute|klarinette|clarinet|sax|posaune|tuba)\s+i\b').hasMatch(voiceSearchText)) {
           voice = 1;
         }
       }

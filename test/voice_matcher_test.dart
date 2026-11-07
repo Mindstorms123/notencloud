@@ -37,6 +37,22 @@ void main() {
       expect(part.detectedInstrument.toLowerCase(), contains('partitur'));
     });
 
+    test('parses Trumpet Cornet I and slash combinations', () {
+      final part1 = VoiceMatcher.parsePartFileName('LIFE ON MARS - Bb Trumpet Cornet I.pdf', 's1', '/p1');
+      expect(part1.detectedInstrument, 'Trompete');
+      expect(part1.detectedVoice, 1);
+      expect(part1.detectedKey, 'Bb');
+
+      final part2 = VoiceMatcher.parsePartFileName('LIFE ON MARS - Bb Trumpet/Cornet 1.pdf', 's1', '/p2');
+      expect(part2.detectedInstrument, 'Trompete');
+      expect(part2.detectedVoice, 1);
+      expect(part2.detectedKey, 'Bb');
+
+      final part3 = VoiceMatcher.parsePartFileName('Trumpet / Cornet 1.pdf', 's1', '/p3');
+      expect(part3.detectedInstrument, 'Trompete');
+      expect(part3.detectedVoice, 1);
+    });
+
     test('consolidates all drums, timpani, and mallets/mellods to Percussion', () {
       final drumPart = VoiceMatcher.parsePartFileName('Schlagzeug.pdf', 's1', '/p1');
       final malletPart = VoiceMatcher.parsePartFileName('Song - Mallets.pdf', 's1', '/p2');

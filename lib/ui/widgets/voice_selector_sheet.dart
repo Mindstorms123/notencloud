@@ -255,31 +255,41 @@ class VoiceSelectorSheet extends StatelessWidget {
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children: auditReport.missingParts.map((m) {
-                        final isMyMissing =
-                            m.toLowerCase().contains(profile.instrument.toLowerCase());
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: isMyMissing
-                                ? AppTheme.rose.withValues(alpha: 0.25)
-                                : AppTheme.darkCard,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: isMyMissing ? AppTheme.rose : AppTheme.darkBorder,
-                              width: isMyMissing ? 1.5 : 1.0,
+                      children: () {
+                        final myInst = profile.instrument.toLowerCase();
+                        final sorted = [...auditReport.missingParts]..sort((a, b) {
+                          final aMatch = a.toLowerCase().contains(myInst);
+                          final bMatch = b.toLowerCase().contains(myInst);
+                          if (aMatch && !bMatch) return -1;
+                          if (!aMatch && bMatch) return 1;
+                          return a.compareTo(b);
+                        });
+
+                        return sorted.map((m) {
+                          final isMyMissing = m.toLowerCase().contains(myInst);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isMyMissing
+                                  ? AppTheme.rose.withValues(alpha: 0.25)
+                                  : AppTheme.darkCard,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isMyMissing ? AppTheme.rose : AppTheme.darkBorder,
+                                width: isMyMissing ? 1.5 : 1.0,
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            m,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isMyMissing ? FontWeight.bold : FontWeight.w500,
-                              color: isMyMissing ? AppTheme.rose : AppTheme.darkTextSecondary,
+                            child: Text(
+                              m,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isMyMissing ? FontWeight.bold : FontWeight.w500,
+                                color: isMyMissing ? AppTheme.rose : AppTheme.darkTextSecondary,
+                              ),
                             ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        }).toList();
+                      }(),
                     ),
                   ],
                 ),
