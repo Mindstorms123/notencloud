@@ -531,17 +531,28 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_setlist.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            Text(
+              _setlist.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '$playableCount Stücke • ${widget.profile.displayName}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
+                Flexible(
+                  child: Text(
+                    '$playableCount Stücke • ${widget.profile.displayName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppTheme.darkTextSecondary),
+                  ),
                 ),
                 if (_setlist.isSyncedWithCloud) ...[
-                  const SizedBox(width: 6),
-                  const Icon(Icons.cloud_done_rounded, size: 14, color: AppTheme.emerald),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.cloud_done_rounded, size: 13, color: AppTheme.emerald),
                 ],
               ],
             ),
@@ -549,15 +560,16 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
             child: TextButton.icon(
               style: TextButton.styleFrom(
                 foregroundColor: _isEditing ? Colors.white : AppTheme.primaryLight,
                 backgroundColor: _isEditing
                     ? AppTheme.emerald
                     : AppTheme.primary.withValues(alpha: 0.15),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: const Size(0, 32),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () {
                 setState(() {
@@ -566,16 +578,17 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
               },
               icon: Icon(
                 _isEditing ? Icons.check_rounded : Icons.edit_rounded,
-                size: 16,
+                size: 14,
               ),
               label: Text(
                 _isEditing ? 'Fertig' : 'Bearbeiten',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.share_rounded),
+            icon: const Icon(Icons.share_rounded, size: 20),
+            visualDensity: VisualDensity.compact,
             tooltip: 'Als PDF teilen / Aushilfe',
             onPressed: () {
               SetlistExportSheet.show(
@@ -590,11 +603,12 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
           IconButton(
             icon: _isSavingToCloud
                 ? const SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 18,
+                    height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Icon(Icons.cloud_upload_outlined),
+                : const Icon(Icons.cloud_upload_outlined, size: 20),
+            visualDensity: VisualDensity.compact,
             tooltip: 'Auf Nextcloud veröffentlichen',
             onPressed: _isSavingToCloud ? null : _syncToNextcloud,
           ),
