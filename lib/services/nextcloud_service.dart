@@ -48,76 +48,8 @@ class NextcloudService {
     }
   }
 
-  /// Scan the root sheet music folder and retrieve all songs with their parts
-  Future<List<Song>> scanLibrary() async {
-    final rootFolder = account.cleanRootFolder;
-    final url = Uri.parse('${account.webDavBaseUrl}$rootFolder');
-
-    // Depth: 1 lists the folder itself and its immediate children (songs & _Setlisten)
-    final request = http.Request('PROPFIND', url)
-      ..headers.addAll(_headers)
-      ..headers['Depth'] = '1';
-
-    final response = await _client.send(request);
-    if (response.statusCode != 207) {
-      throw Exception('Fehler beim Abrufen der Notenliste: HTTP ${response.statusCode}');
-    }
-
-    final body = await response.stream.bytesToString();
-    final document = xml.XmlDocument.parse(body);
-
-    final List<Song> songs = [];
-    final responses = document.findAllElements('d:response').isNotEmpty
-        ? document.findAllElements('d:response')
-        : document.findAllElements('D:response');
-
-    for (final res in responses) {
-      final hrefEl = res.findElements('d:href').isNotEmpty
-          ? res.findElements('d:href').first
-          : res.findElements('D:href').firstOrNull;
-      if (hrefEl == null) continue;
-
-      final href = Uri.decodeFull(hrefEl.innerText);
-      // Skip the root folder itself
-      if (href.endsWith(rootFolder) || href.endsWith('$rootFolder/')) continue;
-
-      // Check if it is a directory
-      final isCollection = res.findAllElements('d:collection').isNotEmpty ||
-          res.findAllElements('D:collection').isNotEmpty;
-
-      if (!isCollection) continue;
-
-      // Extract folder name
-      final folderSegments = href.split('/').where((s) => s.isNotEmpty).toList();
-      final folderName = folderSegments.last;
-
-      // Ignore setlist directory or hidden folders
-      if (folderName.startsWith('.') || folderName == '_Setlisten') continue;
-
-      final songId = folderName;
-      final songTitle = Song.cleanTitleFromFolder(folderName);
-      final remoteFolderPath = href;
-
-      // Scan individual parts inside this song folder
-      final parts = await _scanSongParts(remoteFolderPath, songId);
-
-      songs.add(Song(
-        id: songId,
-        title: songTitle,
-        folderName: folderName,
-        remoteFolderPath: remoteFolderPath,
-        parts: parts,
-        lastSynced: DateTime.now(),
-      ));
-    }
-
-    // Sort songs alphabetically
-    songs.sort((a, b) => a.title.compareTo(b.title));
-    return songs;
-  }
-
-  /// Scan all PDF parts inside a specific song folder
-  Future<List<PartFile>> _scanSongParts(String folderHref, String songId) async {
+  /// Helper to list items in a WebDAV folder
+  Future<List<_DavItem>> _listFolder(String folderHref) async {
     final url = Uri.parse('${account.cleanServerUrl}$folderHref');
     final request = http.Request('PROPFIND', url)
       ..headers.addAll(_headers)
@@ -129,10 +61,12 @@ class NextcloudService {
     final body = await response.stream.bytesToString();
     final document = xml.XmlDocument.parse(body);
 
-    final List<PartFile> parts = [];
+    final List<_DavItem> items = [];
     final responses = document.findAllElements('d:response').isNotEmpty
         ? document.findAllElements('d:response')
         : document.findAllElements('D:response');
+
+    final cleanFolderHref = folderHref.endsWith('/') ? folderHref : '$folderHref/';
 
     for (final res in responses) {
       final hrefEl = res.findElements('d:href').isNotEmpty
@@ -141,14 +75,16 @@ class NextcloudService {
       if (hrefEl == null) continue;
 
       final href = Uri.decodeFull(hrefEl.innerText);
-      if (href.endsWith('/') || !href.toLowerCase().endsWith('.pdf')) continue;
+      final normalizedHref = href.endsWith('/') ? href : '$href/';
+      // Skip the folder itself
+      if (normalizedHref == cleanFolderHref) continue;
 
-      final fileName = href.split('/').last;
+      final isCollection = res.findAllElements('d:collection').isNotEmpty ||
+          res.findAllElements('D:collection').isNotEmpty;
 
-      // Parse metadata from file name using our smart VoiceMatcher
-      final part = VoiceMatcher.parsePartFileName(fileName, songId, href);
+      final segments = href.split('/').where((s) => s.isNotEmpty).toList();
+      final name = segments.isNotEmpty ? segments.last : '';
 
-      // Extract file size if available
       int size = 0;
       final lengthEl = res.findAllElements('d:getcontentlength').isNotEmpty
           ? res.findAllElements('d:getcontentlength').first
@@ -157,15 +93,133 @@ class NextcloudService {
         size = int.tryParse(lengthEl.innerText) ?? 0;
       }
 
-      parts.add(part.copyWith(
-        detectedInstrument: part.detectedInstrument,
-        detectedVoice: part.detectedVoice,
-        detectedKey: part.detectedKey,
-        isCombinedVoice: part.isCombinedVoice,
+      items.add(_DavItem(
+        href: href,
+        name: name,
+        isCollection: isCollection,
+        size: size,
       ));
     }
 
-    // Sort parts (Partitur first, then woodwinds, brass, percussion)
+    return items;
+  }
+
+  /// Scan the root sheet music folder and retrieve all songs with their parts,
+  /// traversing both category folders (e.g. "01_Aktuelle Noten") and instrument subfolders.
+  Future<List<Song>> scanLibrary() async {
+    final rootFolder = account.cleanRootFolder;
+    final rootItems = await _listFolder(rootFolder);
+    final List<Song> songs = [];
+
+    for (final item in rootItems) {
+      if (item.name.startsWith('.') || item.name == '_Setlisten') continue;
+
+      if (item.isCollection) {
+        final categoryName = Song.cleanTitleFromFolder(item.name);
+        final subItems = await _listFolder(item.href);
+
+        final subDirs = subItems.where((i) => i.isCollection).toList();
+        final pdfs = subItems
+            .where((i) => !i.isCollection && i.name.toLowerCase().endsWith('.pdf'))
+            .toList();
+
+        // Case A: Category folder containing songs (e.g. "01_Aktuelle Noten" -> "Under Pressure", "September"...)
+        if (subDirs.isNotEmpty) {
+          for (final songDir in subDirs) {
+            if (songDir.name.startsWith('.')) continue;
+            final songId = '${item.name}_${songDir.name}';
+            final songTitle = Song.cleanTitleFromFolder(songDir.name);
+
+            final parts = await _scanSongFolderDeep(songDir.href, songId);
+            if (parts.isNotEmpty) {
+              songs.add(Song(
+                id: songId,
+                title: songTitle,
+                folderName: songDir.name,
+                remoteFolderPath: songDir.href,
+                category: categoryName,
+                parts: parts,
+                lastSynced: DateTime.now(),
+              ));
+            }
+          }
+        }
+
+        // Case B: Loose PDFs directly in folder (e.g. "03_Unsortiert" or single songs)
+        if (pdfs.isNotEmpty) {
+          if (subDirs.isEmpty) {
+            final songId = item.name;
+            final songTitle = categoryName;
+            final parts = pdfs
+                .map((p) => VoiceMatcher.parsePartFileName(p.name, songId, p.href))
+                .toList();
+            songs.add(Song(
+              id: songId,
+              title: songTitle,
+              folderName: item.name,
+              remoteFolderPath: item.href,
+              category: categoryName,
+              parts: parts,
+              lastSynced: DateTime.now(),
+            ));
+          } else {
+            for (final pdf in pdfs) {
+              final songId = pdf.name;
+              final songTitle = Song.cleanTitleFromFolder(
+                  pdf.name.replaceAll(RegExp(r'\.pdf$', caseSensitive: false), ''));
+              final part = VoiceMatcher.parsePartFileName(pdf.name, songId, pdf.href);
+              songs.add(Song(
+                id: songId,
+                title: songTitle,
+                folderName: item.name,
+                remoteFolderPath: pdf.href,
+                category: categoryName,
+                parts: [part],
+                lastSynced: DateTime.now(),
+              ));
+            }
+          }
+        }
+      }
+    }
+
+    songs.sort((a, b) => a.title.compareTo(b.title));
+    return songs;
+  }
+
+  /// Scans all parts in a song folder, including instrument subfolders (e.g. "Trumpet/1. Trumpet.pdf")
+  Future<List<PartFile>> _scanSongFolderDeep(String songFolderHref, String songId) async {
+    final List<PartFile> parts = [];
+    final items = await _listFolder(songFolderHref);
+
+    for (final item in items) {
+      if (item.name.startsWith('.')) continue;
+
+      if (!item.isCollection) {
+        // Direct PDF in song folder (e.g. "Partitur.pdf", "Alle-Stimmen.pdf")
+        if (item.name.toLowerCase().endsWith('.pdf')) {
+          final part = VoiceMatcher.parsePartFileName(item.name, songId, item.href);
+          parts.add(part.copyWith(fileSizeBytes: item.size));
+        }
+      } else {
+        // Instrument subfolder (e.g. "Trumpet/", "Trombone/", "Flute/")
+        final instrumentHint = item.name;
+        final subFiles = await _listFolder(item.href);
+
+        for (final subFile in subFiles) {
+          if (!subFile.isCollection && subFile.name.toLowerCase().endsWith('.pdf')) {
+            final part = VoiceMatcher.parsePartFileName(
+              subFile.name,
+              songId,
+              subFile.href,
+              instrumentHint: instrumentHint,
+            );
+            parts.add(part.copyWith(fileSizeBytes: subFile.size));
+          }
+        }
+      }
+    }
+
     parts.sort((a, b) => a.fileName.compareTo(b.fileName));
     return parts;
   }
@@ -297,4 +351,18 @@ class NextcloudService {
       return false;
     }
   }
+}
+
+class _DavItem {
+  final String href;
+  final String name;
+  final bool isCollection;
+  final int size;
+
+  const _DavItem({
+    required this.href,
+    required this.name,
+    required this.isCollection,
+    required this.size,
+  });
 }

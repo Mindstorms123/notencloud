@@ -35,6 +35,8 @@ class PartFile {
     int? detectedVoice,
     String? detectedKey,
     bool? isCombinedVoice,
+    int? fileSizeBytes,
+    DateTime? lastModified,
   }) {
     return PartFile(
       id: id,
@@ -46,8 +48,8 @@ class PartFile {
       detectedVoice: detectedVoice ?? this.detectedVoice,
       detectedKey: detectedKey ?? this.detectedKey,
       isCombinedVoice: isCombinedVoice ?? this.isCombinedVoice,
-      fileSizeBytes: fileSizeBytes,
-      lastModified: lastModified,
+      fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
+      lastModified: lastModified ?? this.lastModified,
       isDownloaded: isDownloaded ?? this.isDownloaded,
     );
   }
@@ -91,6 +93,7 @@ class Song {
   final String title;
   final String folderName;
   final String remoteFolderPath;
+  final String category; // e.g. "Aktuelle Noten", "Ältere Noten"
   final List<PartFile> parts;
   final String composer;
   final String arranger;
@@ -103,6 +106,7 @@ class Song {
     required this.title,
     required this.folderName,
     required this.remoteFolderPath,
+    this.category = '',
     this.parts = const [],
     this.composer = '',
     this.arranger = '',
@@ -123,6 +127,7 @@ class Song {
 
   Song copyWith({
     String? title,
+    String? category,
     List<PartFile>? parts,
     String? composer,
     String? arranger,
@@ -135,6 +140,7 @@ class Song {
       title: title ?? this.title,
       folderName: folderName,
       remoteFolderPath: remoteFolderPath,
+      category: category ?? this.category,
       parts: parts ?? this.parts,
       composer: composer ?? this.composer,
       arranger: arranger ?? this.arranger,
@@ -149,6 +155,7 @@ class Song {
         'title': title,
         'folderName': folderName,
         'remoteFolderPath': remoteFolderPath,
+        'category': category,
         'parts': parts.map((p) => p.toJson()).toList(),
         'composer': composer,
         'arranger': arranger,
@@ -162,6 +169,7 @@ class Song {
         title: json['title'] as String,
         folderName: json['folderName'] as String,
         remoteFolderPath: json['remoteFolderPath'] as String,
+        category: json['category'] as String? ?? '',
         parts: (json['parts'] as List<dynamic>?)
                 ?.map((e) => PartFile.fromJson(e as Map<String, dynamic>))
                 .toList() ??

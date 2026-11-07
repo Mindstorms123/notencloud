@@ -56,11 +56,19 @@ class VoiceMatcher {
     'direktion': ['direktion', 'direktion in c', 'direktion in b', 'conductor', 'lead sheet'],
   };
 
-  /// Analyzes a PDF file name and detects instrument, voice number, and key
-  static PartFile parsePartFileName(String fileName, String songId, String remotePath) {
+  /// Analyzes a PDF file name and detects instrument, voice number, and key.
+  /// An optional [instrumentHint] (e.g. from a parent instrument subfolder like "Trumpet")
+  /// helps disambiguate files named simply "1. Trumpet.pdf" or "1.pdf".
+  static PartFile parsePartFileName(
+    String fileName,
+    String songId,
+    String remotePath, {
+    String instrumentHint = '',
+  }) {
     final cleanName = fileName.replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '');
     final lowerClean = cleanName.toLowerCase();
     final norm = normalize(cleanName);
+    final normHint = normalize(instrumentHint);
 
     // 1. Detect voice numbers
     int voice = 0;
@@ -93,20 +101,22 @@ class VoiceMatcher {
 
     // 2. Detect key/transposition
     String detectedKey = '';
-    if (RegExp(r'\b(in\s+)?(bb|b)\b').hasMatch(norm)) {
+    final combinedKeySearch = '$norm $normHint';
+    if (RegExp(r'\b(in\s+)?(bb|b)\b').hasMatch(combinedKeySearch)) {
       detectedKey = 'Bb';
-    } else if (RegExp(r'\b(in\s+)?(eb|es)\b').hasMatch(norm)) {
+    } else if (RegExp(r'\b(in\s+)?(eb|es)\b').hasMatch(combinedKeySearch)) {
       detectedKey = 'Eb';
-    } else if (RegExp(r'\b(in\s+)?f\b').hasMatch(norm)) {
+    } else if (RegExp(r'\b(in\s+)?f\b').hasMatch(combinedKeySearch)) {
       detectedKey = 'F';
-    } else if (RegExp(r'\b(in\s+)?c\b').hasMatch(norm)) {
+    } else if (RegExp(r'\b(in\s+)?c\b').hasMatch(combinedKeySearch)) {
       detectedKey = 'C';
-    } else if (norm.contains('bass') && !norm.contains('bassklarinette')) {
+    } else if (combinedKeySearch.contains('bass') && !combinedKeySearch.contains('bassklarinette')) {
       detectedKey = 'Bass';
     }
 
     // 3. Detect instrument canonical name
     String detectedInstrument = '';
+    // First try the file name
     for (final entry in _instrumentAliases.entries) {
       for (final alias in entry.value) {
         if (norm.contains(alias)) {
@@ -117,10 +127,23 @@ class VoiceMatcher {
       if (detectedInstrument.isNotEmpty) break;
     }
 
+    // If file name had no instrument alias, use instrumentHint from parent folder!
+    if (detectedInstrument.isEmpty && normHint.isNotEmpty) {
+      for (final entry in _instrumentAliases.entries) {
+        for (final alias in entry.value) {
+          if (normHint.contains(alias)) {
+            detectedInstrument = entry.key;
+            break;
+          }
+        }
+        if (detectedInstrument.isNotEmpty) break;
+      }
+    }
+
     // Capitalize canonical instrument for display
     final displayInstrument = detectedInstrument.isNotEmpty
         ? detectedInstrument[0].toUpperCase() + detectedInstrument.substring(1)
-        : cleanName;
+        : (instrumentHint.isNotEmpty ? instrumentHint : cleanName);
 
     return PartFile(
       id: '$songId-$cleanName',

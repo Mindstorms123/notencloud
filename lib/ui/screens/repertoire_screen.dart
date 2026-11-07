@@ -32,6 +32,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSyncing = false;
   String? _syncMessage;
+  String _selectedCategory = 'Alle';
 
   @override
   void initState() {
@@ -50,22 +51,27 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     final cached = widget.storageService.getCachedSongs();
     setState(() {
       _allSongs = cached;
-      _filteredSongs = cached;
+      _onSearchChanged();
     });
+  }
+
+  List<String> get _categories {
+    final cats = _allSongs.map((s) => s.category).where((c) => c.isNotEmpty).toSet().toList();
+    cats.sort();
+    return ['Alle', ...cats];
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.trim().toLowerCase();
     setState(() {
-      if (query.isEmpty) {
-        _filteredSongs = _allSongs;
-      } else {
-        _filteredSongs = _allSongs.where((song) {
-          return song.title.toLowerCase().contains(query) ||
-              song.folderName.toLowerCase().contains(query) ||
-              song.composer.toLowerCase().contains(query);
-        }).toList();
-      }
+      _filteredSongs = _allSongs.where((song) {
+        final matchesCat = _selectedCategory == 'Alle' || song.category == _selectedCategory;
+        if (!matchesCat) return false;
+        if (query.isEmpty) return true;
+        return song.title.toLowerCase().contains(query) ||
+            song.folderName.toLowerCase().contains(query) ||
+            song.composer.toLowerCase().contains(query);
+      }).toList();
     });
   }
 
@@ -258,6 +264,36 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             ),
           ),
 
+          // Category Filter Chips
+          if (_categories.length > 2)
+            SizedBox(
+              height: 42,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: _categories.length,
+                itemBuilder: (context, index) {
+                  final cat = _categories[index];
+                  final isSelected = cat == _selectedCategory;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(cat, style: const TextStyle(fontSize: 12)),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() {
+                            _selectedCategory = cat;
+                            _onSearchChanged();
+                          });
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+
           // Songs List
           Expanded(
             child: _filteredSongs.isEmpty
@@ -326,6 +362,25 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
+                              ],
+                              if (song.category.isNotEmpty) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: Text(
+                                    song.category,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.blue.shade800,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
                               ],
                               Text(
                                 '${song.parts.length} Stimmen',
