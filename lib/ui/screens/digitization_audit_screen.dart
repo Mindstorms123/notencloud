@@ -14,6 +14,14 @@ enum AuditStatusFilter {
   complete,
 }
 
+enum AuditSortOption {
+  percentAsc,  // % niedrigste zuerst (Dringend)
+  percentDesc, // % höchste zuerst (Fast fertig)
+  nameAsc,     // Name (A – Z)
+  nameDesc,    // Name (Z – A)
+  missingDesc, // Meiste fehlende Stimmen
+}
+
 class DigitizationAuditScreen extends StatefulWidget {
   final List<Song> allSongs;
   final StorageService storageService;
@@ -38,6 +46,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   String _selectedCategory = 'Alle Kategorien';
   String _selectedInstrument = 'Alle Instrumente';
   AuditStatusFilter _statusFilter = AuditStatusFilter.all; // Show all pieces by default so complete pieces are visible!
+  AuditSortOption _sortOption = AuditSortOption.percentAsc;
 
   late List<Song> _currentSongs;
   late List<SongDigitizationReport> _reports;
@@ -162,7 +171,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   }
 
   List<SongDigitizationReport> get _filteredReports {
-    return _reports.where((r) {
+    final list = _reports.where((r) {
       // 1. Completion / Status filter
       if (_statusFilter == AuditStatusFilter.incomplete && r.isComplete) return false;
       if (_statusFilter == AuditStatusFilter.complete && !r.isComplete) return false;
@@ -203,6 +212,39 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
 
       return true;
     }).toList();
+
+    // 5. Apply sorting
+    switch (_sortOption) {
+      case AuditSortOption.percentAsc:
+        list.sort((a, b) {
+          final cmp = a.completionPercentage.compareTo(b.completionPercentage);
+          if (cmp != 0) return cmp;
+          return a.song.title.toLowerCase().compareTo(b.song.title.toLowerCase());
+        });
+        break;
+      case AuditSortOption.percentDesc:
+        list.sort((a, b) {
+          final cmp = b.completionPercentage.compareTo(a.completionPercentage);
+          if (cmp != 0) return cmp;
+          return a.song.title.toLowerCase().compareTo(b.song.title.toLowerCase());
+        });
+        break;
+      case AuditSortOption.nameAsc:
+        list.sort((a, b) => a.song.title.toLowerCase().compareTo(b.song.title.toLowerCase()));
+        break;
+      case AuditSortOption.nameDesc:
+        list.sort((a, b) => b.song.title.toLowerCase().compareTo(a.song.title.toLowerCase()));
+        break;
+      case AuditSortOption.missingDesc:
+        list.sort((a, b) {
+          final cmp = b.missingParts.length.compareTo(a.missingParts.length);
+          if (cmp != 0) return cmp;
+          return a.song.title.toLowerCase().compareTo(b.song.title.toLowerCase());
+        });
+        break;
+    }
+
+    return list;
   }
 
   /// Sorts missing parts so that parts matching the selected instrument filter are prioritized to the front
@@ -1131,43 +1173,58 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
             ),
           ),
 
-          // 3.5 Status Filter Buttons (Alle / Fehlend / Vollständig)
+          // 3.5 Sort Dropdown Bar
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildFilterTab(
-                    title: 'Alle',
-                    count: _summary.totalSongs,
-                    isActive: _statusFilter == AuditStatusFilter.all,
-                    color: Colors.white,
-                    onTap: () => setState(() => _statusFilter = AuditStatusFilter.all),
+            child: Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.darkCard,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.darkBorder),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.sort_rounded, size: 18, color: AppTheme.primaryLight),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<AuditSortOption>(
+                        value: _sortOption,
+                        isExpanded: true,
+                        dropdownColor: AppTheme.darkCard,
+                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                        items: const [
+                          DropdownMenuItem(
+                            value: AuditSortOption.percentAsc,
+                            child: Text('Sortierung: % aufsteigend (Dringendste zuerst)'),
+                          ),
+                          DropdownMenuItem(
+                            value: AuditSortOption.percentDesc,
+                            child: Text('Sortierung: % absteigend (Fast fertige zuerst)'),
+                          ),
+                          DropdownMenuItem(
+                            value: AuditSortOption.nameAsc,
+                            child: Text('Sortierung: Name (A – Z)'),
+                          ),
+                          DropdownMenuItem(
+                            value: AuditSortOption.nameDesc,
+                            child: Text('Sortierung: Name (Z – A)'),
+                          ),
+                          DropdownMenuItem(
+                            value: AuditSortOption.missingDesc,
+                            child: Text('Sortierung: Meiste fehlende Stimmen'),
+                          ),
+                        ],
+                        onChanged: (opt) {
+                          if (opt != null) setState(() => _sortOption = opt);
+                        },
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildFilterTab(
-                    title: 'Fehlend',
-                    count: _summary.incompleteSongs,
-                    isActive: _statusFilter == AuditStatusFilter.incomplete,
-                    color: AppTheme.amber,
-                    icon: Icons.warning_amber_rounded,
-                    onTap: () => setState(() => _statusFilter = AuditStatusFilter.incomplete),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildFilterTab(
-                    title: 'Vollständig',
-                    count: _summary.completeSongs,
-                    isActive: _statusFilter == AuditStatusFilter.complete,
-                    color: AppTheme.emerald,
-                    icon: Icons.check_circle_rounded,
-                    onTap: () => setState(() => _statusFilter = AuditStatusFilter.complete),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
@@ -1322,48 +1379,6 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
               child: item,
             )
           : item,
-    );
-  }
-
-  Widget _buildFilterTab({
-    required String title,
-    required int count,
-    required bool isActive,
-    required Color color,
-    IconData? icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        decoration: BoxDecoration(
-          color: isActive ? color.withValues(alpha: 0.18) : AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isActive ? color : AppTheme.darkBorder,
-            width: isActive ? 1.5 : 1.0,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 13, color: isActive ? color : AppTheme.darkTextMuted),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              '$title ($count)',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                color: isActive ? color : AppTheme.darkTextSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

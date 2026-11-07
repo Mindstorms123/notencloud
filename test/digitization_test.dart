@@ -424,20 +424,24 @@ void main() {
       expect(find.text('Complete Rock Song'), findsOneWidget);
       expect(find.text('Incomplete Polka'), findsOneWidget);
 
-      // Tap 'Vollständig' filter tab (in filter bar)
-      await tester.tap(find.text('Vollständig (1)'));
+      // Tap 'Vollständig' stat item in the top stats card
+      await tester.tap(find.text('Vollständig'));
       await tester.pumpAndSettle();
 
       // Only the complete song is visible now!
       expect(find.text('Complete Rock Song'), findsOneWidget);
       expect(find.text('Incomplete Polka'), findsNothing);
 
-      // Tap 'Fehlend' filter tab
-      await tester.tap(find.text('Fehlend (1)'));
+      // Tap 'Unvollständig' stat item in the top stats card
+      await tester.tap(find.text('Unvollständig'));
       await tester.pumpAndSettle();
 
       // Only the incomplete song is visible!
       expect(find.text('Complete Rock Song'), findsNothing);
+      expect(find.text('Incomplete Polka'), findsOneWidget);
+
+      // Verify Sort Dropdown is present
+      expect(find.textContaining('Sortierung:'), findsOneWidget);
       expect(find.text('Incomplete Polka'), findsOneWidget);
     });
   });
