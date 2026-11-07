@@ -702,7 +702,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   }
 
   Widget _buildZoomControls() {
-    if (_isDrawingActive || _isLoadingPdf || _errorMessage != null) {
+    if (_isFullscreen || _isDrawingActive || _isLoadingPdf || _errorMessage != null) {
       return const SizedBox.shrink();
     }
 
