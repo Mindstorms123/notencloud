@@ -64,6 +64,47 @@ void main() {
       expect(reportLuecken.missingParts, isNot(contains('Waldhorn 2')));
     });
 
+    test('unnumbered Bariton alongside Bariton 2 covers voice 1 and does not report Bariton 1 missing', () {
+      final song = createSampleSong(
+        title: 'Polka Bariton Test',
+        category: 'Polka',
+        fileNames: [
+          'Bariton in C.pdf',    // Unnumbered voice 0 covers voice 1
+          'Bariton 2 in Bb.pdf', // Voice 2
+        ],
+      );
+
+      final reportLuecken = DigitizationService.analyzeSong(song, mode: AuditMode.registerLuecken);
+      expect(reportLuecken.missingParts, isNot(contains('Bariton 1')));
+      expect(reportLuecken.missingParts, isNot(contains('Bariton 2')));
+      expect(reportLuecken.isComplete, true);
+
+      final reportSmart = DigitizationService.analyzeSong(song, mode: AuditMode.smartBesetzung);
+      expect(reportSmart.missingParts, isNot(contains('Bariton 1')));
+      expect(reportSmart.missingParts, isNot(contains('Bariton (C)')));
+      expect(reportSmart.missingParts, isNot(contains('Tenorhorn 1 (Bb)')));
+    });
+
+    test('parenthesized copy suffix like (2) does not falsely trigger voice 2 detection', () {
+      final part = VoiceMatcher.parsePartFileName('Euphonium in C (2).pdf', 'song_1', '/local/song_1/Euphonium in C (2).pdf');
+      expect(part.detectedVoice, 0);
+      expect(part.detectedInstrument, 'Bariton');
+      expect(part.detectedKey, 'C');
+
+      final song = createSampleSong(
+        title: 'On Fire',
+        category: 'Rock',
+        fileNames: [
+          'Euphonium in C.pdf',
+          'Euphonium in C (2).pdf',
+        ],
+      );
+
+      final report = DigitizationService.analyzeSong(song, mode: AuditMode.registerLuecken);
+      expect(report.missingParts, isEmpty);
+      expect(report.isComplete, true);
+    });
+
     test('checks standard core blasorchester requirements', () {
       final incompleteSong = createSampleSong(
         title: 'Marsch 1',
@@ -303,6 +344,34 @@ void main() {
       // Star icon should appear for prioritized instrument
       expect(find.byIcon(Icons.star_rounded), findsWidgets);
       expect(find.text('Fehlt: Trompete 2 (Bb)'), findsOneWidget);
+    });
+
+    testWidgets('shows sync button in AppBar and triggers sync', (tester) async {
+      final song = createSampleSong(
+        title: 'Böhmischer Traum',
+        category: 'Polka',
+        fileNames: ['Trompete 1 in Bb.pdf'],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DigitizationAuditScreen(
+            allSongs: [song],
+            storageService: storageService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find sync button in AppBar
+      final syncButton = find.byIcon(Icons.sync_rounded);
+      expect(syncButton, findsOneWidget);
+
+      // Tap sync when no NextcloudService is passed shows offline info
+      await tester.tap(syncButton);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Keine Nextcloud-Verbindung verfügbar'), findsOneWidget);
     });
   });
 }

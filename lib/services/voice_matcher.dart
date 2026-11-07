@@ -227,7 +227,15 @@ class VoiceMatcher {
     } else if (cleanName.contains(' — ')) {
       partSegment = cleanName.split(' — ').last;
     }
-    final voiceSearchText = normalize(partSegment);
+
+    // Strip duplicate copy suffixes in parentheses at the very end (e.g. "Euphonium in C (2)" -> "Euphonium in C")
+    // so duplicate files or alternative versions don't falsely trigger voice 2!
+    final copySuffixMatch = RegExp(r'\s*\(([0-9]+)\)$').firstMatch(partSegment);
+    String voiceSearchSegment = partSegment;
+    if (copySuffixMatch != null) {
+      voiceSearchSegment = partSegment.substring(0, copySuffixMatch.start).trim();
+    }
+    final voiceSearchText = normalize(voiceSearchSegment);
 
     // 1. Detect voice numbers
     int voice = 0;

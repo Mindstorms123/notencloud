@@ -255,7 +255,30 @@ class NextcloudService {
               cached.etag == songDir.etag;
 
           if (isCacheValid) {
-            // Unchanged: reuse parsed parts instantly without any network call!
+            // Unchanged: reuse parsed parts instantly without any network call,
+            // but ensure part metadata matches latest VoiceMatcher rules.
+            final refreshedParts = cached.parts.map((p) {
+              final reparsed = VoiceMatcher.parsePartFileName(p.fileName, songId, p.remotePath);
+              var inst = reparsed.detectedInstrument.trim();
+              if (inst == 'Schlagzeug' || inst == 'Pauken' || inst == 'Glockenspiel') {
+                inst = 'Percussion';
+              }
+              final validInst = (VoiceMatcher.knownRealInstruments.contains(inst) ||
+                      inst == 'Partitur' ||
+                      inst == 'Direktion' ||
+                      inst == 'Zusatzstimme' ||
+                      inst == 'Dokument')
+                  ? inst
+                  : 'Zusatzstimme';
+
+              return p.copyWith(
+                detectedInstrument: validInst,
+                detectedVoice: reparsed.detectedVoice,
+                detectedKey: reparsed.detectedKey,
+                isCombinedVoice: reparsed.isCombinedVoice,
+              );
+            }).toList();
+
             songs.add(cached.copyWith(
               id: songId,
               title: songTitle,
@@ -263,6 +286,7 @@ class NextcloudService {
               remoteFolderPath: songDir.href,
               etag: songDir.etag,
               lastSynced: DateTime.now(),
+              parts: refreshedParts,
             ));
           } else {
             // New or modified: queue for deep scan

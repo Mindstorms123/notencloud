@@ -1220,12 +1220,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: InkWell(
               onTap: () {
                 final songs = widget.storageService.getCachedSongs();
+                final ncService = _account.isValidated ? NextcloudService(_account) : null;
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (ctx) => DigitizationAuditScreen(
                       allSongs: songs,
                       storageService: widget.storageService,
+                      nextcloudService: ncService,
                     ),
                   ),
                 );

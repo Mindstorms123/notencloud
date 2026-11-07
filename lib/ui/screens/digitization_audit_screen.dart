@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/song.dart';
 import '../../services/digitization_service.dart';
+import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
 
 class DigitizationAuditScreen extends StatefulWidget {
   final List<Song> allSongs;
   final StorageService storageService;
+  final NextcloudService? nextcloudService;
+  final Function(List<Song>)? onSongsUpdated;
 
   const DigitizationAuditScreen({
     super.key,
     required this.allSongs,
     required this.storageService,
+    this.nextcloudService,
+    this.onSongsUpdated,
   });
 
   @override
@@ -26,14 +31,18 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   String _selectedInstrument = 'Alle Instrumente';
   bool _onlyIncomplete = true;
 
+  late List<Song> _currentSongs;
   late List<SongDigitizationReport> _reports;
   late DigitizationSummary _summary;
   final TextEditingController _searchController = TextEditingController();
   bool _isExporting = false;
+  bool _isSyncing = false;
+  String? _syncMessage;
 
   @override
   void initState() {
     super.initState();
+    _currentSongs = List.from(widget.allSongs);
     _recomputeReports();
     _searchController.addListener(() {
       setState(() {
@@ -51,16 +60,82 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   void _recomputeReports() {
     final ignoredMap = widget.storageService.getIgnoredMissingPartsMap();
     _reports = DigitizationService.analyzeAllSongs(
-      widget.allSongs,
+      _currentSongs,
       mode: _mode,
       ignoredPartsMap: ignoredMap,
     );
     _summary = DigitizationService.calculateSummary(_reports);
   }
 
+  Future<void> _syncWithCloud() async {
+    if (widget.nextcloudService == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Keine Nextcloud-Verbindung verfügbar (Offline oder nicht angemeldet)'),
+            backgroundColor: AppTheme.amber,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isSyncing = true;
+      _syncMessage = 'Prüfe Cloud auf Änderungen...';
+    });
+
+    try {
+      final updatedSongs = await widget.nextcloudService!.scanLibrary(
+        existingCachedSongs: _currentSongs,
+        onProgress: (current, total) {
+          if (mounted) {
+            setState(() {
+              _syncMessage = 'Aktualisiere: $current / $total...';
+            });
+          }
+        },
+      );
+
+      await widget.storageService.saveCachedSongs(updatedSongs);
+
+      if (mounted) {
+        setState(() {
+          _currentSongs = updatedSongs;
+          _isSyncing = false;
+          _syncMessage = null;
+          _recomputeReports();
+        });
+
+        widget.onSongsUpdated?.call(updatedSongs);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${updatedSongs.length} Stücke erfolgreich synchronisiert'),
+            backgroundColor: AppTheme.emerald,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+          _syncMessage = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Synchronisieren: $e'),
+            backgroundColor: AppTheme.rose,
+          ),
+        );
+      }
+    }
+  }
+
   List<String> get _categories {
     final cats = {'Alle Kategorien'};
-    for (final s in widget.allSongs) {
+    for (final s in _currentSongs) {
       if (s.category.isNotEmpty) cats.add(s.category);
     }
     return cats.toList();
@@ -523,13 +598,30 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
           ],
         ),
         actions: [
-          if (_isExporting)
+          if (_isSyncing)
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: 10),
               child: Center(
                 child: SizedBox(
-                  width: 20,
-                  height: 20,
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryLight),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.sync_rounded, color: AppTheme.primaryLight),
+              tooltip: 'Mit Nextcloud synchronisieren',
+              onPressed: _syncWithCloud,
+            ),
+          if (_isExporting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryLight),
                 ),
               ),
@@ -544,6 +636,24 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
       ),
       body: Column(
         children: [
+          if (_isSyncing) ...[
+            const LinearProgressIndicator(
+              minHeight: 2,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation(AppTheme.primaryLight),
+            ),
+            if (_syncMessage != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                color: AppTheme.primaryLight.withValues(alpha: 0.15),
+                child: Text(
+                  _syncMessage!,
+                  style: const TextStyle(fontSize: 11, color: AppTheme.primaryLight, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
           // 1. Overall Score & Stats Card
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
@@ -945,30 +1055,44 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
 
           // 5. Results List
           Expanded(
-            child: filtered.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: _syncWithCloud,
+              color: AppTheme.primaryLight,
+              backgroundColor: AppTheme.darkSurface,
+              child: filtered.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       children: [
-                        const Icon(Icons.check_circle_outline_rounded, color: AppTheme.emerald, size: 48),
-                        const SizedBox(height: 12),
-                        Text(
-                          _onlyIncomplete
-                              ? 'Keine fehlenden Noten in dieser Auswahl gefunden!'
-                              : 'Keine Stücke gefunden.',
-                          style: const TextStyle(color: AppTheme.darkTextSecondary),
+                        SizedBox(
+                          height: 280,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.check_circle_outline_rounded, color: AppTheme.emerald, size: 48),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _onlyIncomplete
+                                      ? 'Keine fehlenden Noten in dieser Auswahl gefunden!'
+                                      : 'Keine Stücke gefunden.',
+                                  style: const TextStyle(color: AppTheme.darkTextSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+                      itemCount: filtered.length,
+                      itemBuilder: (ctx, index) {
+                        final r = filtered[index];
+                        return _buildSongAuditCard(r);
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-                    itemCount: filtered.length,
-                    itemBuilder: (ctx, index) {
-                      final r = filtered[index];
-                      return _buildSongAuditCard(r);
-                    },
-                  ),
+            ),
           ),
         ],
       ),

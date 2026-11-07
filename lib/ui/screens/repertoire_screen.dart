@@ -480,6 +480,13 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                   builder: (ctx) => DigitizationAuditScreen(
                     allSongs: _allSongs,
                     storageService: widget.storageService,
+                    nextcloudService: widget.nextcloudService,
+                    onSongsUpdated: (updated) {
+                      setState(() {
+                        _allSongs = updated;
+                        _onSearchChanged();
+                      });
+                    },
                   ),
                 ),
               );

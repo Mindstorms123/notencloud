@@ -158,6 +158,10 @@ class DigitizationService {
     if (p == 'euphonium' && (r == 'bariton' || r == 'tenorhorn')) return true;
     if ((p == 'bariton' || p == 'tenorhorn') && r == 'euphonium') return true;
 
+    // Bariton and Tenorhorn satisfy each other in Blasorchester arrangements
+    if (p == 'bariton' && r == 'tenorhorn') return true;
+    if (p == 'tenorhorn' && r == 'bariton') return true;
+
     return false;
   }
 
@@ -278,6 +282,7 @@ class DigitizationService {
     // (e.g. if Trompete 1 and 3 are present, Trompete 2 is a guaranteed gap!)
     final instrumentMaxVoices = <String, int>{};
     final instrumentPresentVoices = <String, Set<int>>{};
+    final instrumentHasUnnumbered = <String, bool>{};
 
     for (final p in song.parts) {
       final inst = p.detectedInstrument;
@@ -295,7 +300,39 @@ class DigitizationService {
           if (p.detectedVoice == 1) voiceSet.add(2);
           if (p.detectedVoice == 3) voiceSet.add(4);
         }
+      } else {
+        instrumentHasUnnumbered[inst] = true;
       }
+    }
+
+    // In music publishing, an unnumbered part (e.g. "Bariton.pdf") alongside a numbered part
+    // (e.g. "Bariton 2.pdf") represents the 1st voice (Voice 1)!
+    instrumentHasUnnumbered.forEach((inst, hasZero) {
+      if (hasZero) {
+        final voiceSet = instrumentPresentVoices.putIfAbsent(inst, () => <int>{});
+        if (!voiceSet.contains(1)) {
+          voiceSet.add(1);
+        }
+      }
+    });
+
+    // Cross-satisfaction for equivalent low brass instruments (Bariton / Euphonium / Tenorhorn)
+    final hasLowBrass1 = (instrumentPresentVoices['Bariton']?.contains(1) ?? false) ||
+        (instrumentPresentVoices['Euphonium']?.contains(1) ?? false) ||
+        (instrumentPresentVoices['Tenorhorn']?.contains(1) ?? false);
+    if (hasLowBrass1) {
+      instrumentPresentVoices.putIfAbsent('Bariton', () => <int>{}).add(1);
+      instrumentPresentVoices.putIfAbsent('Tenorhorn', () => <int>{}).add(1);
+      instrumentPresentVoices.putIfAbsent('Euphonium', () => <int>{}).add(1);
+    }
+
+    final hasLowBrass2 = (instrumentPresentVoices['Bariton']?.contains(2) ?? false) ||
+        (instrumentPresentVoices['Euphonium']?.contains(2) ?? false) ||
+        (instrumentPresentVoices['Tenorhorn']?.contains(2) ?? false);
+    if (hasLowBrass2) {
+      instrumentPresentVoices.putIfAbsent('Bariton', () => <int>{}).add(2);
+      instrumentPresentVoices.putIfAbsent('Tenorhorn', () => <int>{}).add(2);
+      instrumentPresentVoices.putIfAbsent('Euphonium', () => <int>{}).add(2);
     }
 
     // Identify gaps
@@ -335,6 +372,10 @@ class DigitizationService {
               isCovered = true;
               break;
             } else if (p.detectedVoice == req.voiceNumber) {
+              isCovered = true;
+              break;
+            } else if (req.voiceNumber == 1 && p.detectedVoice == 0) {
+              // An unnumbered part (e.g. "Bariton in C.pdf" or "Trompete in Bb.pdf") satisfies voice 1!
               isCovered = true;
               break;
             } else if (p.isCombinedVoice) {
