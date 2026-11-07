@@ -66,6 +66,7 @@ void main() {
           ),
         ],
       );
+      expect(setlist.items.length, 2);
 
       final alteKameraden = Song(
         id: 'song-alte-kameraden',
@@ -101,6 +102,7 @@ void main() {
           ),
         ],
       );
+      expect(setlist.items.length, 2);
 
       final ablaufPlan = Song(
         id: 'song-ablauf',
@@ -118,6 +120,7 @@ void main() {
           ),
         ],
       );
+      expect(setlist.items.length, 2);
 
       // 1. Musician Profile: Trompete 1
       const profileTrompete1 = MusicianProfile(

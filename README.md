@@ -49,10 +49,22 @@
 
 ---
 
-## 📲 Installation
+## 📲 Installation & Updates
 
-### Android
-1. Lade die neueste `app-debug.apk` oder `app-release.apk` aus den [GitHub Releases](https://github.com/Mindstorms123/notencloud/releases) herunter.
+### Direkt-Update in der App (In-App APK Updater)
+1. Öffne in der App den Tab **Einstellungen**.
+2. Tippe unter **App-Updates & APK** auf **„Prüfen“**.
+3. Bei Verfügbarkeit einer neueren Version kann die APK mit einem Fingertipp direkt heruntergeladen und installiert werden.
+
+### Pixel Schnell-Installation per ADB
+Entwickler und Nutzer mit aktiviertem USB-/WLAN-Debugging können die App mit einem einzigen Befehl bauen, übertragen und auf dem Pixel starten:
+```bash
+./install_pixel.sh          # Baut Release-APK, installiert & startet auf Pixel
+./install_pixel.sh --debug  # Schneller Debug-Build für schnelle Tests
+```
+
+### Manuelle APK-Installation
+1. Lade die neueste `app-release.apk` aus den [GitHub Releases](https://github.com/Mindstorms123/notencloud/releases) herunter.
 2. Öffne die APK auf deinem Android-Gerät (Installation aus unbekannten Quellen erlauben).
 3. Öffne die App und melde dich über den Web-Browser bei deiner Nextcloud an.
 

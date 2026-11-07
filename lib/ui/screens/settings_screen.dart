@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/update_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
 import 'login_screen.dart';
@@ -43,6 +46,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isConnectionSuccess = false;
   late String _defaultCategory;
 
+  bool _isCheckingUpdate = false;
+  bool _isDownloadingUpdate = false;
+  double _downloadProgress = 0.0;
+  AppUpdateInfo? _updateInfo;
+  String? _updateError;
+  String _installedVersion = '1.0.0';
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +64,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _usernameController.text = _account.username;
     _passwordController.text = _account.password;
     _rootFolderController.text = _account.rootFolder;
+
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) {
+        setState(() {
+          _installedVersion = info.version;
+        });
+      }
+    }).catchError((_) {});
   }
 
   @override
@@ -378,6 +396,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _checkForUpdate() async {
+    setState(() {
+      _isCheckingUpdate = true;
+      _updateError = null;
+    });
+
+    try {
+      final info = await UpdateService().checkForUpdate();
+      if (mounted) {
+        setState(() {
+          _isCheckingUpdate = false;
+          _updateInfo = info;
+        });
+        if (!info.hasUpdate) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.emerald,
+              content: Text('Notencloud ist mit Version v$_installedVersion auf dem neuesten Stand!'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCheckingUpdate = false;
+          _updateError = 'Update-Prüfung fehlgeschlagen: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _downloadAndInstall(String apkUrl) async {
+    setState(() {
+      _isDownloadingUpdate = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      final result = await UpdateService().downloadAndInstallApk(
+        apkUrl,
+        onProgress: (p) {
+          if (mounted) {
+            setState(() {
+              _downloadProgress = p;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isDownloadingUpdate = false;
+        });
+        if (result.type != ResultType.done) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.amber,
+              content: Text('APK heruntergeladen (${result.message}). Bitte Installation bestätigen.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isDownloadingUpdate = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.rose,
+            content: Text('Fehler beim Herunterladen: $e'),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -981,6 +1077,199 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // App Updates & ADB Pixel Fast-Installer Card
+          Material(
+            color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.system_update_rounded, color: AppTheme.primaryLight, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'App-Updates & APK',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              'Installierte Version: v$_installedVersion',
+                              style: const TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: _isCheckingUpdate || _isDownloadingUpdate ? null : _checkForUpdate,
+                        icon: _isCheckingUpdate
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Prüfen', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+
+                  // If update is available or checked
+                  if (_updateInfo != null && _updateInfo!.hasUpdate) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.emerald.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.new_releases_rounded, color: AppTheme.emerald, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Neue Version verfügbar: v${_updateInfo!.latestVersion}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.emerald, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          if (_updateInfo!.releaseNotes.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _updateInfo!.releaseNotes,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          if (_isDownloadingUpdate) ...[
+                            LinearProgressIndicator(
+                              value: _downloadProgress > 0 ? _downloadProgress : null,
+                              backgroundColor: Colors.white10,
+                              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.emerald),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _downloadProgress > 0
+                                  ? 'Herunterladen: ${(_downloadProgress * 100).toInt()}%'
+                                  : 'Starte Download...',
+                              style: const TextStyle(fontSize: 11, color: AppTheme.emerald),
+                            ),
+                          ] else ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.emerald,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    onPressed: () => _downloadAndInstall(_updateInfo!.apkDownloadUrl),
+                                    icon: const Icon(Icons.download_rounded, size: 16),
+                                    label: const Text('APK direkt aktualisieren', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryLight,
+                                    side: const BorderSide(color: AppTheme.primaryLight),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () {
+                                    launchUrl(Uri.parse('https://github.com/Mindstorms123/notencloud/releases/latest'), mode: LaunchMode.externalApplication);
+                                  },
+                                  child: const Text('GitHub', style: TextStyle(fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  if (_updateError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _updateError!,
+                      style: const TextStyle(color: AppTheme.rose, fontSize: 12),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+                  const Divider(height: 1, color: Colors.white12),
+                  const SizedBox(height: 14),
+
+                  // ADB Fast Installer Tip
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.terminal_rounded, size: 20, color: AppTheme.amber),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Pixel Schnell-Installation (ADB)',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.amber),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                './install_pixel.sh im Terminal ausführen',
+                                style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppTheme.darkTextSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );
