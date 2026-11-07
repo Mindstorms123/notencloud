@@ -58,6 +58,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   final Map<int, PageAnnotations> _pageAnnotations = {};
   final Map<int, List<PageAnnotations>> _undoHistory = {};
   bool _isLoadingPdf = true;
+  bool _isViewerReady = false;
   String? _localPdfPath;
   String? _errorMessage;
   bool _isFullscreen = false;
@@ -78,48 +79,55 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
 
   void _zoomIn() {
     if (_pdfController?.isReady == true) {
-      final current = _pdfController!.currentZoom;
-      final newZoom = (current * 1.25).clamp(_pdfController!.minScale, _pdfController!.maxScale);
-      _pdfController!.setZoom(_pdfController!.centerPosition, newZoom);
+      try {
+        final current = _pdfController!.currentZoom;
+        final newZoom = (current * 1.25).clamp(_pdfController!.minScale, _pdfController!.maxScale);
+        _pdfController!.setZoom(_pdfController!.centerPosition, newZoom);
+      } catch (_) {}
     }
   }
 
   void _zoomOut() {
     if (_pdfController?.isReady == true) {
-      final current = _pdfController!.currentZoom;
-      final newZoom = (current / 1.25).clamp(_pdfController!.minScale, _pdfController!.maxScale);
-      _pdfController!.setZoom(_pdfController!.centerPosition, newZoom);
+      try {
+        final current = _pdfController!.currentZoom;
+        final newZoom = (current / 1.25).clamp(_pdfController!.minScale, _pdfController!.maxScale);
+        _pdfController!.setZoom(_pdfController!.centerPosition, newZoom);
+      } catch (_) {}
     }
   }
 
   void _toggleZoomFit() {
     if (_pdfController?.isReady == true) {
-      if (_isFitWidth) {
-        // Toggle to Fit Page (show entire page height)
-        final matrix = _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
-        if (matrix != null) {
-          _pdfController!.goTo(matrix);
-          setState(() {
-            _isFitWidth = false;
-          });
+      try {
+        if (_isFitWidth) {
+          // Toggle to Fit Page (show entire page height)
+          final matrix = _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
+          if (matrix != null) {
+            _pdfController!.goTo(matrix);
+            setState(() {
+              _isFitWidth = false;
+            });
+          }
+        } else {
+          // Toggle to Fit Width (fill readable page width)
+          final matrix = _pdfController!.calcMatrixFitWidthForPage(pageNumber: _currentPage) ??
+              _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
+          if (matrix != null) {
+            _pdfController!.goTo(matrix);
+            setState(() {
+              _isFitWidth = true;
+            });
+          }
         }
-      } else {
-        // Toggle to Fit Width (fill readable page width)
-        final matrix = _pdfController!.calcMatrixFitWidthForPage(pageNumber: _currentPage) ??
-            _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
-        if (matrix != null) {
-          _pdfController!.goTo(matrix);
-          setState(() {
-            _isFitWidth = true;
-          });
-        }
-      }
+      } catch (_) {}
     }
   }
 
   Future<void> _preparePdf() async {
     setState(() {
       _isLoadingPdf = true;
+      _isViewerReady = false;
       _errorMessage = null;
       _baseFitZoom = null;
     });
@@ -132,32 +140,40 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
 
       final file = File(localPath);
       if (await file.exists()) {
-        setState(() {
-          _localPdfPath = localPath;
-          _isLoadingPdf = false;
-        });
-        _loadPageAnnotations(1);
+        if (mounted) {
+          setState(() {
+            _localPdfPath = localPath;
+            _isLoadingPdf = false;
+          });
+          _loadPageAnnotations(1);
+        }
         return;
       }
 
       if (widget.nextcloudService != null) {
         await widget.nextcloudService!.downloadPart(_currentPart, localPath);
-        setState(() {
-          _localPdfPath = localPath;
-          _isLoadingPdf = false;
-        });
-        _loadPageAnnotations(1);
+        if (mounted) {
+          setState(() {
+            _localPdfPath = localPath;
+            _isLoadingPdf = false;
+          });
+          _loadPageAnnotations(1);
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Notendatei nicht im lokalen Speicher und keine Cloud-Verbindung aktiv.';
+            _isLoadingPdf = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _errorMessage = 'Notendatei nicht im lokalen Speicher und keine Cloud-Verbindung aktiv.';
+          _errorMessage = 'Fehler beim Laden der Noten: $e';
           _isLoadingPdf = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Fehler beim Laden der Noten: $e';
-        _isLoadingPdf = false;
-      });
     }
   }
 
@@ -242,6 +258,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _currentPage = 1;
       _baseFitZoom = null;
       _isFitWidth = true;
+      _isViewerReady = false;
     });
     _preparePdf();
   }
@@ -285,6 +302,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
           _currentPage = 1;
           _baseFitZoom = null;
           _isFitWidth = true;
+          _isViewerReady = false;
         });
         _preparePdf();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -313,6 +331,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _currentPage = 1;
       _baseFitZoom = null;
       _isFitWidth = true;
+      _isViewerReady = false;
     });
     _preparePdf();
   }
@@ -474,19 +493,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       ),
       body: Stack(
         children: [
-          // PDF Display
-          if (_isLoadingPdf)
-            const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: AppTheme.primaryLight),
-                  SizedBox(height: 16),
-                  Text('Lade Noten...', style: TextStyle(color: AppTheme.darkTextSecondary)),
-                ],
-              ),
-            )
-          else if (_errorMessage != null)
+          // PDF Display / Error View
+          if (_errorMessage != null)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -519,6 +527,27 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               controller: _pdfController,
               params: PdfViewerParams(
                 backgroundColor: Colors.black,
+                loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => Container(color: Colors.black),
+                errorBannerBuilder: (context, error, stackTrace, documentRef) {
+                  return Container(
+                    color: Colors.black,
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: AppTheme.rose, size: 48),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Fehler beim Öffnen der Noten-PDF: $error',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppTheme.darkTextSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
                 onGeneralTap: (context, controller, details) {
                   if (_isDrawingActive) return false;
                   if (details.type == PdfViewerGeneralTapType.doubleTap) {
@@ -532,7 +561,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                 onViewerReady: (document, controller) {
                   if (mounted) {
                     setState(() {
-                      _baseFitZoom = controller.currentZoom;
+                      _isViewerReady = true;
+                      try {
+                        _baseFitZoom = controller.currentZoom;
+                      } catch (_) {}
+                      _pageCount = document.pages.length;
                     });
                   }
                 },
@@ -545,14 +578,14 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                   }
                 },
                 onDocumentChanged: (document) {
-                  if (document != null) {
+                  if (document != null && mounted) {
                     setState(() {
                       _pageCount = document.pages.length;
                     });
                   }
                 },
                 pageOverlaysBuilder: (context, pageRect, page) {
-                  if (page.pageNumber != _currentPage) {
+                  if (!_isViewerReady || page.pageNumber != _currentPage || pageRect.width <= 0 || pageRect.height <= 0) {
                     return [];
                   }
                   return [
@@ -576,8 +609,26 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               ),
             ),
 
-          // Floating Setlist Stage Navigation Bar (when in Setlist mode)
-          if (inSetlistMode && !_isLoadingPdf)
+          // Dark Loading Overlay: smooth transition while fetching or layouting PDF
+          if (_isLoadingPdf || (!_isViewerReady && _errorMessage == null))
+            Positioned.fill(
+              child: Container(
+                color: Colors.black,
+                child: const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(color: AppTheme.primaryLight),
+                      SizedBox(height: 16),
+                      Text('Lade Noten...', style: TextStyle(color: AppTheme.darkTextSecondary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // Floating Setlist Stage Navigation Bar (when in Setlist mode and viewer is ready)
+          if (inSetlistMode && !_isLoadingPdf && _isViewerReady && _errorMessage == null)
             Positioned(
               top: _isFullscreen ? 16 : 8,
               left: 16,
@@ -620,8 +671,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               ),
             ),
 
-          // Floating Page indicator (top right)
-          if (!_isLoadingPdf && _errorMessage == null)
+          // Floating Page indicator (top right, when viewer is ready)
+          if (!_isLoadingPdf && _isViewerReady && _errorMessage == null)
             Positioned(
               top: _isFullscreen ? 16 : 8,
               right: 16,
@@ -665,7 +716,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
           _buildZoomControls(),
 
           // Annotation Tools: Corner Pen Button when inactive, Full Toolbar when active, Hidden in Fullscreen
-          if (!_isFullscreen && !_isLoadingPdf && _errorMessage == null)
+          if (!_isFullscreen && !_isLoadingPdf && _isViewerReady && _errorMessage == null)
             if (!_isDrawingActive)
               Positioned(
                 bottom: 24,
@@ -782,12 +833,12 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   }
 
   Widget _buildZoomControls() {
-    if (_isFullscreen || _isDrawingActive || _isLoadingPdf || _errorMessage != null) {
+    if (_isFullscreen || _isDrawingActive || !_isViewerReady || _isLoadingPdf || _errorMessage != null) {
       return const SizedBox.shrink();
     }
 
     final controller = _pdfController;
-    if (controller == null) return const SizedBox.shrink();
+    if (controller == null || !controller.isReady) return const SizedBox.shrink();
 
     return Positioned(
       bottom: 24,
@@ -795,11 +846,18 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       child: ValueListenableBuilder<Matrix4>(
         valueListenable: controller,
         builder: (context, matrix, _) {
-          final currentZoom = controller.isReady ? controller.currentZoom : 1.0;
-          final base = _baseFitZoom ??
-              (controller.isReady
-                  ? (controller.alternativeFitScale ?? controller.coverScale)
-                  : 1.0);
+          double currentZoom = 1.0;
+          double base = 1.0;
+          try {
+            if (controller.isReady) {
+              currentZoom = controller.currentZoom;
+              base = _baseFitZoom ??
+                  (controller.alternativeFitScale ?? controller.coverScale);
+            }
+          } catch (_) {
+            currentZoom = 1.0;
+            base = 1.0;
+          }
           final percent = base > 0 ? ((currentZoom / base) * 100).round() : 100;
 
           return ClipRRect(

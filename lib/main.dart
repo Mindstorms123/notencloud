@@ -8,6 +8,27 @@ import 'ui/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Override Flutter's default red ErrorWidget with a clean, dark stage error fallback
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    debugPrint('Flutter ErrorWidget caught UI exception: ${details.exceptionAsString()}');
+    return Material(
+      color: AppTheme.darkBg,
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppTheme.primaryLight),
+            SizedBox(height: 16),
+            Text(
+              'Lade Noten...',
+              style: TextStyle(color: AppTheme.darkTextSecondary, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  };
   
   // Initialize German locale data for DateFormat
   await initializeDateFormatting('de_DE', null);

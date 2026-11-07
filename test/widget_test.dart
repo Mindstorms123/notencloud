@@ -3,7 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:notencloud/main.dart';
 import 'package:notencloud/models/musician_profile.dart';
+import 'package:notencloud/models/song.dart';
+import 'package:notencloud/services/annotation_service.dart';
 import 'package:notencloud/services/storage_service.dart';
+import 'package:notencloud/ui/screens/score_viewer_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -184,5 +187,46 @@ void main() {
     // Tuba has C, B, Es
     final tubaKeys = MusicianProfile.getValidKeys('Tuba');
     expect(tubaKeys.map((k) => k.key).toList(), ['C', 'Bb', 'Eb']);
+  });
+
+  testWidgets('ScoreViewerScreen shows clean dark loading screen without any exceptions or red flash', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final storageService = await StorageService.init();
+
+    final testSong = Song(
+      id: 'test_song',
+      title: 'Fliegermarsch',
+      folderName: 'Fliegermarsch',
+      remoteFolderPath: '/Noten/Fliegermarsch',
+      parts: [
+        PartFile(
+          id: 'part_1',
+          songId: 'test_song',
+          fileName: 'Fliegermarsch_Trompete_1.pdf',
+          detectedInstrument: 'Trompete',
+          detectedVoice: 1,
+          remotePath: '/Noten/Fliegermarsch/Fliegermarsch_Trompete_1.pdf',
+        ),
+      ],
+    );
+
+    // Pump ScoreViewerScreen wrapped in MaterialApp
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: ScoreViewerScreen(
+          song: testSong,
+          initialPart: testSong.parts.first,
+          profile: const MusicianProfile(instrument: 'Trompete', voiceNumber: 1, keyOrClef: 'Bb'),
+          storageService: storageService,
+          annotationService: AnnotationService(storageService),
+        ),
+      ),
+    );
+
+    // Initial pump: must show dark loading screen "Lade Noten..." without throwing any exception!
+    expect(find.text('Lade Noten...'), findsWidgets);
+    expect(find.text('Fliegermarsch'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
   });
 }
