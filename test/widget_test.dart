@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:notencloud/main.dart';
+import 'package:notencloud/models/musician_profile.dart';
 import 'package:notencloud/services/storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -156,5 +157,32 @@ void main() {
 
     // Song is restored!
     expect(find.text("Don't Stop Believin'"), findsOneWidget);
+  });
+
+  test('MusicianProfile.getValidKeys strictly constrains keys to real existing music options', () {
+    // Altsaxophon must only exist in Es
+    final altKeys = MusicianProfile.getValidKeys('Altsaxophon');
+    expect(altKeys.map((k) => k.key).toList(), ['Eb']);
+    expect(altKeys.first.label, 'in Es');
+
+    // Trompete must only exist in B and C (never F or Es)
+    final tptKeys = MusicianProfile.getValidKeys('Trompete');
+    expect(tptKeys.map((k) => k.key).toList(), ['Bb', 'C']);
+
+    // Waldhorn must only exist in F and Es (never B or C)
+    final hornKeys = MusicianProfile.getValidKeys('Waldhorn');
+    expect(hornKeys.map((k) => k.key).toList(), ['F', 'Eb']);
+
+    // Flöte must only exist in C
+    final fluteKeys = MusicianProfile.getValidKeys('Flöte');
+    expect(fluteKeys.map((k) => k.key).toList(), ['C']);
+
+    // Percussion has no key
+    final percKeys = MusicianProfile.getValidKeys('Percussion');
+    expect(percKeys.isEmpty, true);
+
+    // Tuba has C, B, Es
+    final tubaKeys = MusicianProfile.getValidKeys('Tuba');
+    expect(tubaKeys.map((k) => k.key).toList(), ['C', 'Bb', 'Eb']);
   });
 }

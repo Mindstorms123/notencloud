@@ -57,23 +57,6 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
       if (!availableInstruments.contains(_selectedInstrument)) _selectedInstrument,
     ];
 
-    const voiceNumbers = [
-      (0, 'Alle'),
-      (1, '1. Stimme'),
-      (2, '2. Stimme'),
-      (3, '3. Stimme'),
-      (4, '4. Stimme'),
-    ];
-
-    const standardKeys = [
-      ('', 'Standard'),
-      ('Bb', 'in B'),
-      ('C', 'in C'),
-      ('Eb', 'in Es'),
-      ('F', 'in F'),
-      ('Bass', 'Bass-Schl.'),
-    ];
-
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       decoration: const BoxDecoration(
@@ -187,8 +170,23 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
                   ),
                   onSelected: (selected) {
                     if (selected) {
+                      final def = MusicianProfile.getDefinition(inst);
+                      var newKey = _selectedKey;
+                      if (def.validKeys.isEmpty) {
+                        newKey = '';
+                      } else if (newKey.isNotEmpty && !def.validKeys.any((k) => k.key.toLowerCase() == newKey.toLowerCase())) {
+                        newKey = def.defaultKey;
+                      }
+
+                      var newVoice = _selectedVoice;
+                      if (newVoice != 0 && !def.validVoices.contains(newVoice)) {
+                        newVoice = def.defaultVoice;
+                      }
+
                       setState(() {
                         _selectedInstrument = inst;
+                        _selectedKey = newKey;
+                        _selectedVoice = newVoice;
                       });
                     }
                   },
@@ -253,95 +251,148 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
             const SizedBox(height: 20),
 
             // Voice Number Section
-            const Text(
-              'STIMMEN-NUMMER',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: AppTheme.darkTextSecondary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: voiceNumbers.map((v) {
-                  final isSelected = _selectedVoice == v.$1;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(v.$2),
-                      selected: isSelected,
-                      selectedColor: AppTheme.primary,
-                      backgroundColor: AppTheme.darkCard,
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.primaryLight : AppTheme.darkBorder,
+            Builder(
+              builder: (context) {
+                final validVoices = MusicianProfile.getValidVoices(_selectedInstrument);
+                final voiceList = [
+                  (0, 'Alle'),
+                  ...validVoices.where((v) => v > 0).map((v) => (v, '$v. Stimme')),
+                ];
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'STIMMEN-NUMMER',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: AppTheme.darkTextSecondary,
                       ),
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? Colors.white : AppTheme.darkTextPrimary,
-                      ),
-                      onSelected: (selected) {
-                        if (selected) {
-                          setState(() {
-                            _selectedVoice = v.$1;
-                          });
-                        }
-                      },
                     ),
-                  );
-                }).toList(),
-              ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: voiceList.map((v) {
+                          final isSelected = _selectedVoice == v.$1;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(v.$2),
+                              selected: isSelected,
+                              selectedColor: AppTheme.primary,
+                              backgroundColor: AppTheme.darkCard,
+                              side: BorderSide(
+                                color: isSelected ? AppTheme.primaryLight : AppTheme.darkBorder,
+                              ),
+                              labelStyle: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? Colors.white : AppTheme.darkTextPrimary,
+                              ),
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _selectedVoice = v.$1;
+                                  });
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
 
-            const SizedBox(height: 20),
+            // Key / Clef Section (only shown if instrument has valid keys!)
+            Builder(
+              builder: (context) {
+                final validKeys = MusicianProfile.getValidKeys(_selectedInstrument);
+                if (validKeys.isEmpty) return const SizedBox.shrink();
 
-            // Key / Clef Section
-            const Text(
-              'STIMMUNG / SCHLÜSSEL',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
-                color: AppTheme.darkTextSecondary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: standardKeys.map((k) {
-                  final isSelected = _selectedKey.toLowerCase() == k.$1.toLowerCase();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(k.$2),
-                      selected: isSelected,
-                      selectedColor: AppTheme.primary,
-                      backgroundColor: AppTheme.darkCard,
-                      side: BorderSide(
-                        color: isSelected ? AppTheme.primaryLight : AppTheme.darkBorder,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 20),
+                    const Text(
+                      'STIMMUNG / SCHLÜSSEL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: AppTheme.darkTextSecondary,
                       ),
-                      labelStyle: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? Colors.white : AppTheme.darkTextPrimary,
-                      ),
-                      onSelected: (selected) {
-                        if (selected) {
-                          setState(() {
-                            _selectedKey = k.$1;
-                          });
-                        }
-                      },
                     ),
-                  );
-                }).toList(),
-              ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          if (validKeys.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: const Text('Alle'),
+                                selected: _selectedKey.isEmpty,
+                                selectedColor: AppTheme.primary,
+                                backgroundColor: AppTheme.darkCard,
+                                side: BorderSide(
+                                  color: _selectedKey.isEmpty ? AppTheme.primaryLight : AppTheme.darkBorder,
+                                ),
+                                labelStyle: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: _selectedKey.isEmpty ? FontWeight.bold : FontWeight.normal,
+                                  color: _selectedKey.isEmpty ? Colors.white : AppTheme.darkTextPrimary,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() {
+                                      _selectedKey = '';
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ...validKeys.map((k) {
+                            final isSelected = _selectedKey.toLowerCase() == k.key.toLowerCase();
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(k.label),
+                                selected: isSelected,
+                                selectedColor: AppTheme.primary,
+                                backgroundColor: AppTheme.darkCard,
+                                side: BorderSide(
+                                  color: isSelected ? AppTheme.primaryLight : AppTheme.darkBorder,
+                                ),
+                                labelStyle: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected ? Colors.white : AppTheme.darkTextPrimary,
+                                ),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() {
+                                      _selectedKey = k.key;
+                                    });
+                                  }
+                                },
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
 
             const SizedBox(height: 16),

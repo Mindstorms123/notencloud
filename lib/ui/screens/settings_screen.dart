@@ -586,8 +586,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   }).toList(),
                   onChanged: (val) {
                     if (val != null) {
+                      final def = MusicianProfile.getDefinition(val);
+                      var newKey = _profile.keyOrClef;
+                      if (def.validKeys.isEmpty) {
+                        newKey = '';
+                      } else if (!def.validKeys.any((k) => k.key == newKey)) {
+                        newKey = def.defaultKey;
+                      }
+
+                      var newVoice = _profile.voiceNumber;
+                      if (!def.validVoices.contains(newVoice)) {
+                        newVoice = def.defaultVoice;
+                      }
+
                       setState(() {
-                        _profile = _profile.copyWith(instrument: val);
+                        _profile = _profile.copyWith(
+                          instrument: val,
+                          keyOrClef: newKey,
+                          voiceNumber: newVoice,
+                        );
                       });
                       _saveProfile();
                     }
@@ -595,59 +612,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                Row(
-                  children: [
-                    // Voice number
-                    Expanded(
-                      child: DropdownButtonFormField<int>(
-                        key: ValueKey('voice_${_profile.voiceNumber}'),
-                        initialValue: _profile.voiceNumber,
-                        decoration: const InputDecoration(
-                          labelText: 'Stimme',
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 0, child: Text('Keine / Alle')),
-                          DropdownMenuItem(value: 1, child: Text('1. Stimme')),
-                          DropdownMenuItem(value: 2, child: Text('2. Stimme')),
-                          DropdownMenuItem(value: 3, child: Text('3. Stimme')),
-                          DropdownMenuItem(value: 4, child: Text('4. Stimme')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _profile = _profile.copyWith(voiceNumber: val);
-                            });
-                            _saveProfile();
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
+                Builder(
+                  builder: (context) {
+                    final validVoices = MusicianProfile.getValidVoices(_profile.instrument);
+                    final effectiveVoice = validVoices.contains(_profile.voiceNumber)
+                        ? _profile.voiceNumber
+                        : validVoices.first;
+                    final validKeys = MusicianProfile.getValidKeys(_profile.instrument);
 
-                    // Key / Transposition
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        key: ValueKey('key_${_profile.keyOrClef}'),
-                        initialValue: MusicianProfile.standardKeys.contains(_profile.keyOrClef)
-                            ? _profile.keyOrClef
-                            : 'Bb',
-                        decoration: const InputDecoration(
-                          labelText: 'Stimmung',
+                    return Row(
+                      children: [
+                        // Voice number
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            key: ValueKey('voice_${_profile.instrument}_$effectiveVoice'),
+                            initialValue: effectiveVoice,
+                            decoration: const InputDecoration(
+                              labelText: 'Stimme',
+                            ),
+                            items: validVoices.map((v) {
+                              return DropdownMenuItem(
+                                value: v,
+                                child: Text(v == 0 ? 'Keine / Alle' : '$v. Stimme'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _profile = _profile.copyWith(voiceNumber: val);
+                                });
+                                _saveProfile();
+                              }
+                            },
+                          ),
                         ),
-                        items: MusicianProfile.standardKeys.map((k) {
-                          return DropdownMenuItem(value: k, child: Text(k));
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _profile = _profile.copyWith(keyOrClef: val);
-                            });
-                            _saveProfile();
-                          }
-                        },
-                      ),
-                    ),
-                  ],
+
+                        // Key / Transposition (only shown if instrument has valid keys)
+                        if (validKeys.isNotEmpty) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              key: ValueKey('key_${_profile.instrument}_${_profile.keyOrClef}'),
+                              initialValue: validKeys.any((k) => k.key == _profile.keyOrClef)
+                                  ? _profile.keyOrClef
+                                  : validKeys.first.key,
+                              decoration: const InputDecoration(
+                                labelText: 'Stimmung',
+                              ),
+                              items: validKeys.map((k) {
+                                return DropdownMenuItem(value: k.key, child: Text(k.label));
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _profile = _profile.copyWith(keyOrClef: val);
+                                  });
+                                  _saveProfile();
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
                 if (_profile.instrument == 'Percussion') ...[
                   const SizedBox(height: 14),

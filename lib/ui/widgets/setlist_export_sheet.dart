@@ -476,8 +476,23 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
                             }).toList(),
                             onChanged: (val) {
                               if (val != null) {
+                                final def = MusicianProfile.getDefinition(val);
+                                var newKey = _selectedKey;
+                                if (def.validKeys.isEmpty) {
+                                  newKey = '';
+                                } else if (!def.validKeys.any((k) => k.key.toLowerCase() == newKey.toLowerCase())) {
+                                  newKey = def.defaultKey;
+                                }
+
+                                var newVoice = _selectedVoice;
+                                if (newVoice != 0 && !def.validVoices.contains(newVoice)) {
+                                  newVoice = def.defaultVoice;
+                                }
+
                                 setState(() {
                                   _selectedInstrument = val;
+                                  _selectedKey = newKey;
+                                  _selectedVoice = newVoice;
                                 });
                               }
                             },
@@ -489,74 +504,89 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
 
                     // Voice Number Dropdown (if not percussion)
                     if (_selectedInstrument != 'Percussion') ...[
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.darkSurface,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppTheme.darkBorder),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: _selectedVoice,
-                              isExpanded: true,
-                              dropdownColor: AppTheme.darkCard,
-                              items: const [
-                                DropdownMenuItem(value: 0, child: Text('Alle', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 1, child: Text('1. St.', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 2, child: Text('2. St.', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 3, child: Text('3. St.', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 4, child: Text('4. St.', style: TextStyle(fontSize: 13))),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedVoice = val;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
+                      Builder(
+                        builder: (context) {
+                          final validVoices = MusicianProfile.getValidVoices(_selectedInstrument);
+                          final effectiveVoice = (_selectedVoice == 0 || validVoices.contains(_selectedVoice))
+                              ? _selectedVoice
+                              : validVoices.first;
 
-                      // Key Dropdown
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.darkSurface,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppTheme.darkBorder),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: ['Bb', 'C', 'Es', 'F', ''].contains(_selectedKey)
-                                  ? _selectedKey
-                                  : '',
-                              isExpanded: true,
-                              dropdownColor: AppTheme.darkCard,
-                              items: const [
-                                DropdownMenuItem(value: '', child: Text('–', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 'Bb', child: Text('in Bb', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 'C', child: Text('in C', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 'Es', child: Text('in Es', style: TextStyle(fontSize: 13))),
-                                DropdownMenuItem(value: 'F', child: Text('in F', style: TextStyle(fontSize: 13))),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedKey = val;
-                                  });
-                                }
-                              },
+                          return Expanded(
+                            flex: 2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.darkSurface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppTheme.darkBorder),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  value: effectiveVoice,
+                                  isExpanded: true,
+                                  dropdownColor: AppTheme.darkCard,
+                                  items: [
+                                    const DropdownMenuItem(value: 0, child: Text('Alle', style: TextStyle(fontSize: 13))),
+                                    ...validVoices.where((v) => v > 0).map((v) {
+                                      return DropdownMenuItem(value: v, child: Text('$v. St.', style: const TextStyle(fontSize: 13)));
+                                    }),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        _selectedVoice = val;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
+                      ),
+
+                      // Key Dropdown (only shown if instrument has valid keys)
+                      Builder(
+                        builder: (context) {
+                          final validKeys = MusicianProfile.getValidKeys(_selectedInstrument);
+                          if (validKeys.isEmpty) return const SizedBox.shrink();
+
+                          final effectiveKey = validKeys.any((k) => k.key.toLowerCase() == _selectedKey.toLowerCase())
+                              ? validKeys.firstWhere((k) => k.key.toLowerCase() == _selectedKey.toLowerCase()).key
+                              : validKeys.first.key;
+
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(width: 8),
+                              Container(
+                                constraints: const BoxConstraints(minWidth: 90),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.darkSurface,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppTheme.darkBorder),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: effectiveKey,
+                                    dropdownColor: AppTheme.darkCard,
+                                    items: validKeys.map((k) {
+                                      return DropdownMenuItem(value: k.key, child: Text(k.label, style: const TextStyle(fontSize: 13)));
+                                    }).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setState(() {
+                                          _selectedKey = val;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ] else ...[
                       // Percussion sub-instrument picker
