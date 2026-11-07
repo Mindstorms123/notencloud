@@ -18,6 +18,7 @@ class StorageService {
   static const _prefDefaultCategoryKey = 'default_repertoire_category';
   static const _prefLastActiveCategoryKey = 'last_active_repertoire_category';
   static const _prefPedalSettingsKey = 'pedal_settings';
+  static const _prefIgnoredPartsKey = 'ignored_missing_parts';
 
   final SharedPreferences _prefs;
 
@@ -204,5 +205,56 @@ class StorageService {
 
   Future<void> savePedalSettings(PedalSettings settings) async {
     await _prefs.setString(_prefPedalSettingsKey, jsonEncode(settings.toJson()));
+  }
+
+  // --- Ignored Missing Parts (Nicht im Original vorhanden) ---
+
+  Map<String, List<String>> getIgnoredMissingPartsMap() {
+    final jsonStr = _prefs.getString(_prefIgnoredPartsKey);
+    if (jsonStr == null || jsonStr.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(k, (v as List).cast<String>()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  List<String> getIgnoredMissingPartsForSong(String songId) {
+    return getIgnoredMissingPartsMap()[songId] ?? const [];
+  }
+
+  Future<void> setPartIgnored(String songId, String partName, bool isIgnored) async {
+    final map = getIgnoredMissingPartsMap();
+    final list = map[songId] != null ? List<String>.from(map[songId]!) : <String>[];
+    if (isIgnored) {
+      if (!list.contains(partName)) list.add(partName);
+    } else {
+      list.remove(partName);
+    }
+    if (list.isEmpty) {
+      map.remove(songId);
+    } else {
+      map[songId] = list;
+    }
+    await _prefs.setString(_prefIgnoredPartsKey, jsonEncode(map));
+  }
+
+  Future<void> setPartsIgnored(String songId, List<String> partNames, bool isIgnored) async {
+    final map = getIgnoredMissingPartsMap();
+    final list = map[songId] != null ? List<String>.from(map[songId]!) : <String>[];
+    for (final p in partNames) {
+      if (isIgnored) {
+        if (!list.contains(p)) list.add(p);
+      } else {
+        list.remove(p);
+      }
+    }
+    if (list.isEmpty) {
+      map.remove(songId);
+    } else {
+      map[songId] = list;
+    }
+    await _prefs.setString(_prefIgnoredPartsKey, jsonEncode(map));
   }
 }

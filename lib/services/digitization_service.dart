@@ -7,7 +7,8 @@ import '../models/song.dart';
 import 'voice_matcher.dart';
 
 enum AuditMode {
-  standardBesetzung, // Standard Blasorchester (ca. 18 Kernstimmen)
+  smartBesetzung,    // Auto-Erkennung (Pop/Rock/Concert Band ohne Flügelhorn vs. Traditionell Blasorchester)
+  standardBesetzung, // Klassische Kernbesetzung (stur alle ~18 Kernstimmen)
   vollbesetzung,     // Großes Blasorchester (inkl. Klarinette 3, Horn 3-4, etc.)
   registerLuecken,   // Nur erkannte Lücken in bereits vorhandenen Registern
 }
@@ -37,6 +38,7 @@ class SongDigitizationReport {
   final Song song;
   final List<String> presentParts;
   final List<String> missingParts;
+  final List<String> ignoredParts;
   final int totalExpected;
   final int totalPresent;
   final double completionPercentage;
@@ -45,12 +47,31 @@ class SongDigitizationReport {
     required this.song,
     required this.presentParts,
     required this.missingParts,
+    this.ignoredParts = const [],
     required this.totalExpected,
     required this.totalPresent,
     required this.completionPercentage,
   });
 
   bool get isComplete => missingParts.isEmpty;
+}
+
+class DigitizationPriority {
+  final String instrumentOrVoice; // e.g. "Trompete 2" or "Flügelhorn 1"
+  final int missingCount;          // e.g. 14 pieces missing this voice
+  final int presentCount;          // e.g. 6 pieces have it
+  final int totalEligibleSongs;    // e.g. 20 pieces
+  final double completionRate;     // e.g. 30.0%
+  final List<Song> songsMissing;   // Song objects missing this part
+
+  const DigitizationPriority({
+    required this.instrumentOrVoice,
+    required this.missingCount,
+    required this.presentCount,
+    required this.totalEligibleSongs,
+    required this.completionRate,
+    required this.songsMissing,
+  });
 }
 
 class DigitizationSummary {
@@ -60,6 +81,7 @@ class DigitizationSummary {
   final int totalMissingParts;
   final double overallPercentage;
   final Map<String, int> missingByInstrument;
+  final List<DigitizationPriority> priorities;
 
   const DigitizationSummary({
     required this.totalSongs,
@@ -68,6 +90,7 @@ class DigitizationSummary {
     required this.totalMissingParts,
     required this.overallPercentage,
     required this.missingByInstrument,
+    this.priorities = const [],
   });
 }
 
@@ -138,16 +161,106 @@ class DigitizationService {
     return false;
   }
 
+  /// Checks whether a song is expected to have Flügelhorn parts
+  static bool isFluegelhornExpectedForSong(Song song) {
+    // 1. If any Flügelhorn part is already present, it is definitely expected!
+    final hasFluegel = song.parts.any((p) =>
+        p.detectedInstrument.toLowerCase() == 'flügelhorn' ||
+        p.fileName.toLowerCase().contains('fluegel') ||
+        p.fileName.toLowerCase().contains('flügel'));
+    if (hasFluegel) return true;
+
+    // 2. If it has traditional Tenorhorn parts, it's a traditional German Blasorchester piece
+    final hasTenorhorn = song.parts.any((p) =>
+        p.detectedInstrument.toLowerCase() == 'tenorhorn' ||
+        p.fileName.toLowerCase().contains('tenorhorn'));
+    if (hasTenorhorn) return true;
+
+    // 3. Category checks for traditional pieces
+    final cat = song.category.toLowerCase();
+    if (cat.contains('polka') ||
+        cat.contains('marsch') ||
+        cat.contains('walzer') ||
+        cat.contains('böhmisch') ||
+        cat.contains('traditionell') ||
+        cat.contains('volksmusik')) {
+      return true;
+    }
+
+    // 4. Modern categories definitely don't have Flügelhorn in their original editions
+    if (cat.contains('rock') ||
+        cat.contains('pop') ||
+        cat.contains('modern') ||
+        cat.contains('film') ||
+        cat.contains('musical') ||
+        cat.contains('big band') ||
+        cat.contains('swing') ||
+        cat.contains('jazz') ||
+        cat.contains('disney')) {
+      return false;
+    }
+
+    // 5. Look at trumpet parts: if piece has 3 or more trumpet parts, it's a concert band setting
+    int trumpetCount = 0;
+    for (final p in song.parts) {
+      if (p.detectedInstrument.toLowerCase() == 'trompete' ||
+          p.fileName.toLowerCase().contains('trumpet') ||
+          p.fileName.toLowerCase().contains('cornet')) {
+        trumpetCount++;
+      }
+    }
+    if (trumpetCount >= 3) {
+      return false;
+    }
+
+    // If no flügelhorn and no tenorhorn parts are in the folder, and it has trumpet parts,
+    // default to not requiring flügelhorn in smart mode
+    return false;
+  }
+
+  /// Checks whether a song is expected to have German Tenorhorn parts
+  static bool isTenorhornExpectedForSong(Song song) {
+    // 1. If Tenorhorn is already present, it is definitely expected
+    final hasTenorhorn = song.parts.any((p) =>
+        p.detectedInstrument.toLowerCase() == 'tenorhorn' ||
+        p.fileName.toLowerCase().contains('tenorhorn'));
+    if (hasTenorhorn) return true;
+
+    // 2. Traditional categories
+    final cat = song.category.toLowerCase();
+    if (cat.contains('polka') ||
+        cat.contains('marsch') ||
+        cat.contains('walzer') ||
+        cat.contains('böhmisch') ||
+        cat.contains('traditionell')) {
+      return true;
+    }
+
+    // 3. Modern concert band pieces use Euphonium / Baritone instead of German Tenorhorn
+    final hasBaritoneOrEuph = song.parts.any((p) =>
+        p.detectedInstrument.toLowerCase() == 'bariton' ||
+        p.detectedInstrument.toLowerCase() == 'euphonium' ||
+        p.fileName.toLowerCase().contains('euphonium') ||
+        p.fileName.toLowerCase().contains('baritone'));
+    if (hasBaritoneOrEuph) {
+      return false;
+    }
+
+    return false;
+  }
+
   /// Analyzes a single song and identifies missing parts and voice gaps
   static SongDigitizationReport analyzeSong(
     Song song, {
-    AuditMode mode = AuditMode.standardBesetzung,
+    AuditMode mode = AuditMode.smartBesetzung,
+    List<String> ignoredParts = const [],
   }) {
     if (song.isDocumentOrList) {
       return SongDigitizationReport(
         song: song,
         presentParts: song.parts.map((p) => p.fileName).toList(),
         missingParts: const [],
+        ignoredParts: ignoredParts,
         totalExpected: song.parts.length,
         totalPresent: song.parts.length,
         completionPercentage: 100.0,
@@ -204,6 +317,16 @@ class DigitizationService {
           : standardRequirements.where((r) => r.isCore).toList();
 
       for (final req in requirements) {
+        // Smart mode exclusions for non-existent instruments in modern literature
+        if (mode == AuditMode.smartBesetzung) {
+          if (req.instrument == 'Flügelhorn' && !isFluegelhornExpectedForSong(song)) {
+            continue;
+          }
+          if (req.instrument == 'Tenorhorn' && !isTenorhornExpectedForSong(song)) {
+            continue;
+          }
+        }
+
         bool isCovered = false;
 
         for (final p in song.parts) {
@@ -233,6 +356,15 @@ class DigitizationService {
       }
     }
 
+    // Remove parts marked as "nicht im Original vorhanden"
+    if (ignoredParts.isNotEmpty) {
+      missingSet.removeWhere((m) {
+        return ignoredParts.any((ignored) =>
+            m.toLowerCase().contains(ignored.toLowerCase()) ||
+            ignored.toLowerCase().contains(m.toLowerCase()));
+      });
+    }
+
     final missingList = missingSet.toList()..sort();
     final expectedCount = presentList.length + missingList.length;
     final percent = expectedCount > 0
@@ -243,6 +375,7 @@ class DigitizationService {
       song: song,
       presentParts: presentList,
       missingParts: missingList,
+      ignoredParts: ignoredParts,
       totalExpected: expectedCount,
       totalPresent: presentList.length,
       completionPercentage: percent,
@@ -252,12 +385,73 @@ class DigitizationService {
   /// Analyzes a full repertoire list of songs
   static List<SongDigitizationReport> analyzeAllSongs(
     List<Song> songs, {
-    AuditMode mode = AuditMode.standardBesetzung,
+    AuditMode mode = AuditMode.smartBesetzung,
+    Map<String, List<String>> ignoredPartsMap = const {},
   }) {
     return songs
         .where((s) => !s.isDocumentOrList)
-        .map((s) => analyzeSong(s, mode: mode))
+        .map((s) => analyzeSong(
+              s,
+              mode: mode,
+              ignoredParts: ignoredPartsMap[s.id] ?? const [],
+            ))
         .toList();
+  }
+
+  /// Calculates prioritized recommendations for what voices/instruments to digitize next
+  /// to achieve the fastest and highest impact on the overall repertoire completeness.
+  static List<DigitizationPriority> calculatePriorities(
+    List<SongDigitizationReport> reports, {
+    int maxResults = 5,
+  }) {
+    if (reports.isEmpty) return const [];
+
+    final missingMap = <String, List<SongDigitizationReport>>{};
+    final presentMap = <String, int>{};
+
+    for (final r in reports) {
+      for (final m in r.missingParts) {
+        missingMap.putIfAbsent(m, () => []).add(r);
+      }
+      for (final p in r.presentParts) {
+        presentMap[p] = (presentMap[p] ?? 0) + 1;
+      }
+    }
+
+    final priorities = <DigitizationPriority>[];
+
+    missingMap.forEach((partName, missingReports) {
+      final missingCount = missingReports.length;
+      int presentCount = 0;
+      presentMap.forEach((pName, count) {
+        if (pName.toLowerCase().contains(partName.toLowerCase()) ||
+            partName.toLowerCase().contains(pName.toLowerCase())) {
+          presentCount += count;
+        }
+      });
+
+      final total = presentCount + missingCount;
+      final rate = total > 0 ? (presentCount / total) * 100.0 : 0.0;
+
+      priorities.add(
+        DigitizationPriority(
+          instrumentOrVoice: partName,
+          missingCount: missingCount,
+          presentCount: presentCount,
+          totalEligibleSongs: total,
+          completionRate: rate,
+          songsMissing: missingReports.map((r) => r.song).toList(),
+        ),
+      );
+    });
+
+    priorities.sort((a, b) {
+      final cmp = b.missingCount.compareTo(a.missingCount);
+      if (cmp != 0) return cmp;
+      return a.completionRate.compareTo(b.completionRate);
+    });
+
+    return priorities.take(maxResults).toList();
   }
 
   /// Calculates statistical summary across all analyzed song reports
@@ -270,6 +464,7 @@ class DigitizationService {
         totalMissingParts: 0,
         overallPercentage: 100.0,
         missingByInstrument: {},
+        priorities: [],
       );
     }
 
@@ -299,6 +494,7 @@ class DigitizationService {
 
     final totalParts = presentTotal + missingTotal;
     final overallPct = totalParts > 0 ? (presentTotal / totalParts) * 100.0 : 100.0;
+    final priorities = calculatePriorities(reports);
 
     return DigitizationSummary(
       totalSongs: reports.length,
@@ -307,6 +503,7 @@ class DigitizationService {
       totalMissingParts: missingTotal,
       overallPercentage: overallPct,
       missingByInstrument: sortedMissingMap,
+      priorities: priorities,
     );
   }
 

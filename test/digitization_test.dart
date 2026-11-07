@@ -96,6 +96,48 @@ void main() {
       expect(report.presentParts, contains('Trompete 1 in Bb'));
     });
 
+    test('smart mode does not demand Flügelhorn on modern Pop/Rock arrangements', () {
+      final rockSong = createSampleSong(
+        title: 'Life on Mars',
+        category: 'Rock',
+        fileNames: [
+          'LIFE ON MARS - Bb Trumpet Cornet I.pdf',
+          'LIFE ON MARS - Bb Trumpet 2.pdf',
+        ],
+      );
+
+      final smartReport = DigitizationService.analyzeSong(rockSong, mode: AuditMode.smartBesetzung);
+      // In smart mode, Flügelhorn should NOT be demanded for a Rock song without Flügelhorn parts!
+      expect(smartReport.missingParts, isNot(contains('Flügelhorn 1 (Bb)')));
+      expect(smartReport.missingParts, isNot(contains('Flügelhorn 2 (Bb)')));
+
+      // But in strict classical standardBesetzung mode, it is still checked if user explicitly wants it
+      final strictReport = DigitizationService.analyzeSong(rockSong, mode: AuditMode.standardBesetzung);
+      expect(strictReport.missingParts, contains('Flügelhorn 1 (Bb)'));
+    });
+
+    test('manual ignore (Nicht im Original) removes missing part and increases completion', () {
+      final song = createSampleSong(
+        title: 'Polka No 1',
+        category: 'Polka',
+        fileNames: ['Trompete 1 in Bb.pdf', 'Trompete 3 in Bb.pdf'],
+      );
+
+      final reportBefore = DigitizationService.analyzeSong(song, mode: AuditMode.registerLuecken);
+      expect(reportBefore.missingParts, contains('Trompete 2'));
+      expect(reportBefore.isComplete, false);
+
+      // Mark Trompete 2 as ignored (nicht im Original)
+      final reportAfter = DigitizationService.analyzeSong(
+        song,
+        mode: AuditMode.registerLuecken,
+        ignoredParts: ['Trompete 2'],
+      );
+      expect(reportAfter.missingParts, isNot(contains('Trompete 2')));
+      expect(reportAfter.isComplete, true);
+      expect(reportAfter.completionPercentage, 100.0);
+    });
+
     test('ignores documents and setlists as already complete', () {
       final docSong = Song(
         id: 'doc_1',
@@ -136,6 +178,27 @@ void main() {
       expect(summary.completeSongs, 1);
       expect(summary.totalMissingParts, 1);
       expect(summary.missingByInstrument['Trompete 2'], 1);
+    });
+
+    test('calculatePriorities correctly ranks voices by highest missing count and lowest rate', () {
+      final song1 = createSampleSong(
+        title: 'Song 1',
+        category: 'Marsch',
+        fileNames: ['Trompete 1 in Bb.pdf', 'Trompete 3 in Bb.pdf'], // Trompete 2 missing
+      );
+      final song2 = createSampleSong(
+        title: 'Song 2',
+        category: 'Marsch',
+        fileNames: ['Trompete 1 in Bb.pdf', 'Trompete 3 in Bb.pdf', 'Posaune 1.pdf', 'Posaune 3.pdf'], // Trompete 2 & Posaune 2 missing
+      );
+
+      final reports = DigitizationService.analyzeAllSongs([song1, song2], mode: AuditMode.registerLuecken);
+      final priorities = DigitizationService.calculatePriorities(reports);
+
+      expect(priorities, isNotEmpty);
+      // Trompete 2 is missing in both songs, so it should be rank #1!
+      expect(priorities.first.instrumentOrVoice, 'Trompete 2');
+      expect(priorities.first.missingCount, 2);
     });
 
     test('generateShareText formats text with stats and missing items', () {
@@ -187,6 +250,8 @@ void main() {
       // Check title & stats bar
       expect(find.text('Digitalisierungs-Check'), findsOneWidget);
       expect(find.text('Gesamt-Digitalisierungsscore'), findsOneWidget);
+      expect(find.text('Smart-Besetzung (Auto)'), findsOneWidget);
+      expect(find.text('Empfohlene nächste Digitalisierungs-Ziele'), findsOneWidget);
       expect(find.text('Stücke'), findsOneWidget);
       expect(find.text('Vollständig'), findsOneWidget);
       expect(find.text('Unvollständig'), findsOneWidget);

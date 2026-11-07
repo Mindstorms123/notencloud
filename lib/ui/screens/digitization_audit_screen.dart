@@ -20,7 +20,7 @@ class DigitizationAuditScreen extends StatefulWidget {
 }
 
 class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
-  AuditMode _mode = AuditMode.standardBesetzung;
+  AuditMode _mode = AuditMode.smartBesetzung;
   String _searchQuery = '';
   String _selectedCategory = 'Alle Kategorien';
   String _selectedInstrument = 'Alle Instrumente';
@@ -49,7 +49,12 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   }
 
   void _recomputeReports() {
-    _reports = DigitizationService.analyzeAllSongs(widget.allSongs, mode: _mode);
+    final ignoredMap = widget.storageService.getIgnoredMissingPartsMap();
+    _reports = DigitizationService.analyzeAllSongs(
+      widget.allSongs,
+      mode: _mode,
+      ignoredPartsMap: ignoredMap,
+    );
     _summary = DigitizationService.calculateSummary(_reports);
   }
 
@@ -290,6 +295,38 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
+
+                    // Quick action button: "Kein Flügelhorn in diesem Satz"
+                    if (r.missingParts.any((m) => m.toLowerCase().contains('flügelhorn') || m.toLowerCase().contains('fluegel')))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.music_off_rounded, size: 16, color: AppTheme.amber),
+                            label: const Text('Kein Flügelhorn in diesem Satz (ausblenden)', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.amber,
+                              side: BorderSide(color: AppTheme.amber.withValues(alpha: 0.5)),
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () async {
+                              final fluegelParts = r.missingParts
+                                  .where((m) => m.toLowerCase().contains('flügelhorn') || m.toLowerCase().contains('fluegel'))
+                                  .toList();
+                              await widget.storageService.setPartsIgnored(r.song.id, fluegelParts, true);
+                              if (mounted && ctx.mounted) {
+                                setState(() => _recomputeReports());
+                                Navigator.pop(ctx);
+                                final updated = _reports.firstWhere((rep) => rep.song.id == r.song.id);
+                                _showSongDetailsModal(updated);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -304,7 +341,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                               m.toLowerCase().contains(_selectedInstrument.toLowerCase());
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 3),
                             child: Row(
                               children: [
                                 Icon(
@@ -339,13 +376,87 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.visibility_off_outlined, size: 16, color: AppTheme.darkTextMuted),
+                                  tooltip: 'Nicht im Original vorhanden (ausblenden)',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  onPressed: () async {
+                                    await widget.storageService.setPartIgnored(r.song.id, m, true);
+                                    if (mounted && ctx.mounted) {
+                                      setState(() => _recomputeReports());
+                                      Navigator.pop(ctx);
+                                      final updated = _reports.firstWhere((rep) => rep.song.id == r.song.id);
+                                      _showSongDetailsModal(updated);
+                                    }
+                                  },
+                                ),
                               ],
                             ),
                           );
                         }).toList(),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Ignored parts section (marked as "nicht im Original vorhanden")
+                  if (r.ignoredParts.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.visibility_off_rounded, color: AppTheme.darkTextMuted, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'NICHT IM ORIGINALSATZ VORHANDEN (${r.ignoredParts.length})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.darkTextMuted, letterSpacing: 0.5),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.darkBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: r.ignoredParts.map((ign) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_rounded, size: 14, color: AppTheme.darkTextMuted),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(ign, style: const TextStyle(color: AppTheme.darkTextMuted, fontSize: 12)),
+                                ),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () async {
+                                    await widget.storageService.setPartIgnored(r.song.id, ign, false);
+                                    if (mounted && ctx.mounted) {
+                                      setState(() => _recomputeReports());
+                                      Navigator.pop(ctx);
+                                      final updated = _reports.firstWhere((rep) => rep.song.id == r.song.id);
+                                      _showSongDetailsModal(updated);
+                                    }
+                                  },
+                                  child: const Text('Wiederherstellen', style: TextStyle(fontSize: 11, color: AppTheme.primaryLight)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
 
                   // Present section
@@ -545,8 +656,21 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
             child: Row(
               children: [
                 ChoiceChip(
+                  selected: _mode == AuditMode.smartBesetzung,
+                  label: const Text('Smart-Besetzung (Auto)'),
+                  onSelected: (sel) {
+                    if (sel) {
+                      setState(() {
+                        _mode = AuditMode.smartBesetzung;
+                        _recomputeReports();
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
                   selected: _mode == AuditMode.standardBesetzung,
-                  label: const Text('Kernbesetzung (Standard)'),
+                  label: const Text('Klassisch (18 Kernstimmen)'),
                   onSelected: (sel) {
                     if (sel) {
                       setState(() {
@@ -585,6 +709,147 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
               ],
             ),
           ),
+
+          // 2.5 Priority Recommendations Carousel ("Nächste Digitalisierungs-Ziele")
+          if (_summary.priorities.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.primaryLight.withValues(alpha: 0.12),
+                      AppTheme.darkCard,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, color: AppTheme.amber, size: 16),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Empfohlene nächste Digitalisierungs-Ziele',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const Spacer(),
+                        const Text(
+                          'Tippen zum Filtern',
+                          style: TextStyle(fontSize: 10, color: AppTheme.darkTextMuted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 56,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _summary.priorities.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, idx) {
+                          final p = _summary.priorities[idx];
+                          final root = p.instrumentOrVoice.split(' ').first;
+                          final isSelected = _selectedInstrument == root;
+
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedInstrument = 'Alle Instrumente';
+                                } else {
+                                  _selectedInstrument = _instrumentsWithMissingParts.contains(root)
+                                      ? root
+                                      : 'Alle Instrumente';
+                                }
+                              });
+                            },
+                            child: Container(
+                              width: 190,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.amber.withValues(alpha: 0.22)
+                                    : AppTheme.darkSurface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected ? AppTheme.amber : AppTheme.darkBorder,
+                                  width: isSelected ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '#${idx + 1}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.amber,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          p.instrumentOrVoice,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Fehlt in ${p.missingCount} Stücken',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 10, color: AppTheme.rose),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${p.completionRate.round()}%',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: p.completionRate >= 50 ? AppTheme.amber : AppTheme.rose,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // 3. Search & Filters Bar
           Padding(
