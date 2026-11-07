@@ -13,6 +13,8 @@ class StorageService {
   static const _prefAccountKey = 'nextcloud_account';
   static const _prefSongsCacheKey = 'cached_songs_index';
   static const _prefLocalSetlistsKey = 'local_setlists';
+  static const _prefDefaultCategoryKey = 'default_repertoire_category';
+  static const _prefLastActiveCategoryKey = 'last_active_repertoire_category';
 
   final SharedPreferences _prefs;
 
@@ -21,6 +23,24 @@ class StorageService {
   static Future<StorageService> init() async {
     final prefs = await SharedPreferences.getInstance();
     return StorageService(prefs);
+  }
+
+  // --- Category Preferences ---
+
+  String getDefaultCategory() {
+    return _prefs.getString(_prefDefaultCategoryKey) ?? 'Aktuelle Noten';
+  }
+
+  Future<void> setDefaultCategory(String category) async {
+    await _prefs.setString(_prefDefaultCategoryKey, category);
+  }
+
+  String getLastActiveCategory() {
+    return _prefs.getString(_prefLastActiveCategoryKey) ?? getDefaultCategory();
+  }
+
+  Future<void> setLastActiveCategory(String category) async {
+    await _prefs.setString(_prefLastActiveCategoryKey, category);
   }
 
   // --- Profile ---

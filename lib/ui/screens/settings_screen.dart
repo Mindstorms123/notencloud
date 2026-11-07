@@ -36,12 +36,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isTestingConnection = false;
   String? _connectionTestResult;
   bool _isConnectionSuccess = false;
+  late String _defaultCategory;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.storageService.getProfile();
     _account = widget.storageService.getAccount();
+    _defaultCategory = widget.storageService.getDefaultCategory();
 
     _serverUrlController.text = _account.serverUrl;
     _usernameController.text = _account.username;
@@ -325,6 +327,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ...dynamicInstruments,
       if (!dynamicInstruments.contains(_profile.instrument)) _profile.instrument,
     ];
+    final cachedCats = cachedSongs.map((s) => s.category).where((c) => c.isNotEmpty).toSet().toList();
+    cachedCats.sort();
+    final categoriesList = [
+      'Aktuelle Noten',
+      ...cachedCats.where((c) => c != 'Aktuelle Noten'),
+      'Alle',
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -478,6 +487,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 14),
+
+                // Default Start Category / Folder
+                DropdownButtonFormField<String>(
+                  value: categoriesList.contains(_defaultCategory)
+                      ? _defaultCategory
+                      : 'Aktuelle Noten',
+                  decoration: const InputDecoration(
+                    labelText: 'Standard-Ordner beim Start',
+                    prefixIcon: Icon(Icons.folder_special_rounded),
+                    helperText: 'Standard: Aktuelle Noten (öffnet immer den zuletzt aktiven Ordner)',
+                  ),
+                  items: categoriesList.map((cat) {
+                    return DropdownMenuItem(value: cat, child: Text(cat));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _defaultCategory = val;
+                      });
+                      widget.storageService.setDefaultCategory(val);
+                      widget.storageService.setLastActiveCategory(val);
+                    }
+                  },
                 ),
               ],
             ),

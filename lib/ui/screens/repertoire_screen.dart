@@ -36,13 +36,14 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   bool _isSyncing = false;
   bool _isBackgroundSyncing = false;
   String? _syncMessage;
-  String _selectedCategory = 'Alle';
+  late String _selectedCategory;
   bool _onlyMyVoice = false;
   late MusicianProfile _activeProfile;
 
   @override
   void initState() {
     super.initState();
+    _selectedCategory = widget.storageService.getLastActiveCategory();
     _activeProfile = widget.profile;
     _loadLocalSongs();
     _searchController.addListener(_onSearchChanged);
@@ -67,8 +68,21 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
       if ((s.title.toLowerCase() == 'aktuelle noten' || s.title.toLowerCase() == 'ältere noten') && s.parts.length > 50) return false;
       return true;
     }).toList();
+
+    final lastCat = widget.storageService.getLastActiveCategory();
+    final availableCats = cached.map((s) => s.category).where((c) => c.isNotEmpty).toSet().toList();
+    availableCats.sort();
+    final categories = ['Alle', ...availableCats];
+
     setState(() {
       _allSongs = cached;
+      if (categories.contains(lastCat)) {
+        _selectedCategory = lastCat;
+      } else if (categories.contains('Aktuelle Noten')) {
+        _selectedCategory = 'Aktuelle Noten';
+      } else {
+        _selectedCategory = 'Alle';
+      }
       _onSearchChanged();
     });
   }
@@ -572,6 +586,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                             _selectedCategory = cat;
                             _onSearchChanged();
                           });
+                          widget.storageService.setLastActiveCategory(cat);
                         }
                       },
                     ),
