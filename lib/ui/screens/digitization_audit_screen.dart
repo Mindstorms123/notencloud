@@ -428,48 +428,50 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                   // Publisher Edition & Online-Lookup Card
                   Builder(builder: (context) {
                     final edition = EditionLookupService.getEdition(r.song.title);
-                    final alleNotenUrl = EditionLookupService.getAlleNotenSearchUrl(r.song.title);
-                    final googleUrl = EditionLookupService.getGoogleBesetzungUrl(r.song.title);
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryLight.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.menu_book_rounded, color: AppTheme.primaryLight, size: 18),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'VERLAGSAUSGABE & BESETZUNG',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryLight, letterSpacing: 0.5),
-                              ),
-                              const Spacer(),
-                              if (edition != null && edition.publisher.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primaryLight.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    edition.publisher,
-                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-                                  ),
+                    if (edition != null) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryLight.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.menu_book_rounded, color: AppTheme.primaryLight, size: 18),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'VERLAGSAUSGABE & BESETZUNG',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryLight, letterSpacing: 0.5),
                                 ),
-                            ],
-                          ),
-                          if (edition != null) ...[
+                                const Spacer(),
+                                if (edition.publisher.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryLight.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      edition.publisher,
+                                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                  ),
+                              ],
+                            ),
                             const SizedBox(height: 8),
-                            if (edition.arranger.isNotEmpty)
+                            if (edition.arranger.isNotEmpty || edition.orderNumber.isNotEmpty)
                               Text(
-                                'Arrangement: ${edition.arranger}${edition.series.isNotEmpty ? " • ${edition.series}" : ""}',
+                                [
+                                  if (edition.arranger.isNotEmpty) 'Arrangement: ${edition.arranger}',
+                                  if (edition.series.isNotEmpty) edition.series,
+                                  if (edition.orderNumber.isNotEmpty) 'Bestell-Nr. ${edition.orderNumber}',
+                                ].join(' • '),
                                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                             if (edition.instrumentationNote.isNotEmpty) ...[
@@ -479,44 +481,61 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                                 style: const TextStyle(fontSize: 11, color: AppTheme.darkTextSecondary, height: 1.3),
                               ),
                             ],
-                          ],
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
+                            const SizedBox(height: 12),
+                            if (edition.hasDirectUrl)
+                              SizedBox(
+                                width: double.infinity,
                                 child: ElevatedButton.icon(
                                   icon: const Icon(Icons.open_in_new_rounded, size: 14),
-                                  label: const Text('Alle-Noten.de', style: TextStyle(fontSize: 12)),
+                                  label: Text('Verlagsausgabe öffnen (${edition.publisher})', style: const TextStyle(fontSize: 12)),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primaryLight,
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    padding: const EdgeInsets.symmetric(vertical: 9),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
                                   onPressed: () => launchUrl(
-                                    Uri.parse(alleNotenUrl),
+                                    Uri.parse(edition.directUrl!),
                                     mode: LaunchMode.externalApplication,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  icon: const Icon(Icons.search_rounded, size: 14),
-                                  label: const Text('Google Besetzung', style: TextStyle(fontSize: 12)),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.darkTextPrimary,
-                                    side: const BorderSide(color: AppTheme.darkBorder),
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              )
+                            else
+                              const Row(
+                                children: [
+                                  Icon(Icons.info_outline_rounded, size: 14, color: AppTheme.darkTextMuted),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Kein direkter Verlagslink verifiziert',
+                                      style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                                    ),
                                   ),
-                                  onPressed: () => launchUrl(
-                                    Uri.parse(googleUrl),
-                                    mode: LaunchMode.externalApplication,
-                                  ),
-                                ),
+                                ],
                               ),
-                            ],
+                          ],
+                        ),
+                      );
+                    }
+
+                    // Edition is null: honest status
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.darkBorder),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.library_books_outlined, size: 16, color: AppTheme.darkTextMuted),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Keine spezielle Verlagsausgabe verifiziert. Prüfung erfolgt nach Standard-Blasorchester-Besetzung.',
+                              style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                            ),
                           ),
                         ],
                       ),
@@ -1559,25 +1578,30 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                     )
                   else
                     const SizedBox.shrink(),
-                  const Spacer(),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: () => launchUrl(
-                      Uri.parse(EditionLookupService.getAlleNotenSearchUrl(r.song.title)),
-                      mode: LaunchMode.externalApplication,
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('Alle-Noten.de', style: TextStyle(fontSize: 10, color: AppTheme.primaryLight, fontWeight: FontWeight.w600)),
-                          SizedBox(width: 3),
-                          Icon(Icons.open_in_new_rounded, size: 11, color: AppTheme.primaryLight),
-                        ],
+                  if (edition != null && edition.hasDirectUrl) ...[
+                    const Spacer(),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => launchUrl(
+                        Uri.parse(edition.directUrl!),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              edition.publisher.isNotEmpty ? edition.publisher : 'Verlagsausgabe',
+                              style: const TextStyle(fontSize: 10, color: AppTheme.primaryLight, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 3),
+                            const Icon(Icons.open_in_new_rounded, size: 11, color: AppTheme.primaryLight),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
 
