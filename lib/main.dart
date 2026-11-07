@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'services/storage_service.dart';
+import 'ui/screens/login_screen.dart';
 import 'ui/screens/main_navigation_screen.dart';
 import 'ui/theme/app_theme.dart';
 
@@ -26,18 +27,27 @@ void main() async {
 
 class NotencloudApp extends StatelessWidget {
   final StorageService storageService;
+  final bool? isConfiguredOverride;
 
-  const NotencloudApp({super.key, required this.storageService});
+  const NotencloudApp({
+    super.key,
+    required this.storageService,
+    this.isConfiguredOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isConfigured = isConfiguredOverride ?? storageService.getAccount().isConfigured;
+
     return MaterialApp(
       title: 'Notencloud',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark, // Default to sleek Stage Dark Mode
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      home: MainNavigationScreen(storageService: storageService),
+      home: isConfigured
+          ? MainNavigationScreen(storageService: storageService)
+          : LoginScreen(storageService: storageService),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
+import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StorageService storageService;
@@ -218,6 +219,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? 'Anmeldung abgebrochen.'
           : 'Zeitfenster für Bestätigung im Browser abgelaufen.';
     });
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Nextcloud trennen?', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Möchtest du das aktuelle Nextcloud-Konto abmelden? Bereits heruntergeladene Noten bleiben auf dem Gerät erhalten.',
+          style: TextStyle(color: AppTheme.darkTextSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen', style: TextStyle(color: AppTheme.darkTextMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.rose,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Abmelden'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      const emptyAccount = NextcloudAccount(serverUrl: '', username: '', password: '');
+      await widget.storageService.saveAccount(emptyAccount);
+      setState(() {
+        _account = emptyAccount;
+        _usernameController.clear();
+        _passwordController.clear();
+        _connectionTestResult = null;
+      });
+      widget.onAccountUpdated(emptyAccount);
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => LoginScreen(storageService: widget.storageService)),
+          (route) => false,
+        );
+      }
+    }
   }
 
   void _shareConnectionInfo() {
@@ -560,138 +609,169 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 18),
 
                 // 1-Click Browser Login Card
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.primary.withValues(alpha: 0.2),
-                        AppTheme.primaryLight.withValues(alpha: 0.08),
+                if (_account.isConfigured)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.emerald.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: AppTheme.emerald, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Verbunden als: ${_account.username}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.emerald),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Server: ${_account.cleanServerUrl}',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                                onPressed: _isTestingConnection ? null : _startBrowserLoginFlow,
+                                icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                                label: const Text('Im Browser neu anmelden', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppTheme.darkSurface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(color: AppTheme.darkBorder),
+                                ),
+                              ),
+                              icon: const Icon(Icons.share_rounded, size: 18, color: AppTheme.primaryLight),
+                              tooltip: 'Einrichtung für Kollegen teilen',
+                              onPressed: _shareConnectionInfo,
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppTheme.darkSurface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(color: AppTheme.rose),
+                                ),
+                              ),
+                              icon: const Icon(Icons.logout_rounded, size: 18, color: AppTheme.rose),
+                              tooltip: 'Nextcloud trennen / Abmelden',
+                              onPressed: _logout,
+                            ),
+                          ],
+                        ),
                       ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.35)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.auto_awesome_rounded, color: AppTheme.primaryLight, size: 18),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Ein-Klick Nextcloud Browser-Login',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: AppTheme.primaryLight,
-                              ),
-                            ),
-                          ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.primary.withValues(alpha: 0.2),
+                          AppTheme.primaryLight.withValues(alpha: 0.08),
                         ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Öffnet deinen Browser für die Anmeldung. Einfach auf "Zugriff gewähren" tippen – kein Passwort-Abtippen nötig!',
-                        style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primary,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                padding: const EdgeInsets.symmetric(vertical: 11),
-                              ),
-                              onPressed: _isTestingConnection ? null : _startBrowserLoginFlow,
-                              icon: const Icon(Icons.open_in_browser_rounded, size: 18),
-                              label: const Text('Im Browser anmelden', style: TextStyle(fontWeight: FontWeight.bold)),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            style: IconButton.styleFrom(
-                              backgroundColor: AppTheme.darkSurface,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                side: const BorderSide(color: AppTheme.darkBorder),
-                              ),
-                            ),
-                            icon: const Icon(Icons.share_rounded, size: 18, color: AppTheme.primaryLight),
-                            tooltip: 'Einrichtung für Kollegen teilen',
-                            onPressed: _shareConnectionInfo,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 18),
-                const Row(
-                  children: [
-                    Expanded(child: Divider(color: AppTheme.darkBorder)),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Text('oder manuell eingeben', style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.35)),
                     ),
-                    Expanded(child: Divider(color: AppTheme.darkBorder)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _serverUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Server-URL',
-                    hintText: 'https://cloud.mein-orchester.de',
-                    prefixIcon: Icon(Icons.link_rounded),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.auto_awesome_rounded, color: AppTheme.primaryLight, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Nextcloud Browser-Login',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: AppTheme.primaryLight,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Öffnet deinen Browser für die Anmeldung. Einfach auf "Zugriff gewähren" tippen – kein Passwort-Abtippen nötig!',
+                          style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _serverUrlController,
+                          decoration: const InputDecoration(
+                            labelText: 'Server-URL',
+                            hintText: 'https://cloud.mein-orchester.de',
+                            prefixIcon: Icon(Icons.link_rounded),
+                          ),
+                          onChanged: (_) => _saveAccount(),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(vertical: 11),
+                                ),
+                                onPressed: _isTestingConnection ? null : _startBrowserLoginFlow,
+                                icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                                label: const Text('Im Browser anmelden', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppTheme.darkSurface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: const BorderSide(color: AppTheme.darkBorder),
+                                ),
+                              ),
+                              icon: const Icon(Icons.share_rounded, size: 18, color: AppTheme.primaryLight),
+                              tooltip: 'Einrichtung für Kollegen teilen',
+                              onPressed: _shareConnectionInfo,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  onChanged: (_) => _saveAccount(),
-                ),
-                const SizedBox(height: 12),
 
-                TextField(
-                  controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Benutzername / E-Mail',
-                    prefixIcon: Icon(Icons.account_circle_rounded),
-                  ),
-                  onChanged: (_) => _saveAccount(),
-                ),
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Passwort / App-Token',
-                    prefixIcon: Icon(Icons.lock_rounded),
-                  ),
-                  onChanged: (_) => _saveAccount(),
-                ),
-                const SizedBox(height: 12),
-
-                TextField(
-                  controller: _rootFolderController,
-                  decoration: const InputDecoration(
-                    labelText: 'Notenordner',
-                    hintText: '/Noten',
-                    prefixIcon: Icon(Icons.folder_rounded),
-                  ),
-                  onChanged: (_) => _saveAccount(),
-                ),
-                const SizedBox(height: 16),
-
-                if (_connectionTestResult != null)
+                if (_connectionTestResult != null) ...[
+                  const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 14),
                     decoration: BoxDecoration(
                       color: _isConnectionSuccess
                           ? AppTheme.emerald.withValues(alpha: 0.12)
@@ -724,23 +804,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                   ),
+                ],
 
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                const SizedBox(height: 14),
+
+                // Manual Login (Dezent in ExpansionTile)
+                Material(
+                  color: AppTheme.darkSurface.withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: AppTheme.darkBorder.withValues(alpha: 0.7)),
                   ),
-                  onPressed: _isTestingConnection ? null : _testConnection,
-                  icon: _isTestingConnection
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.wifi_tethering_rounded),
-                  label: const Text('Verbindung testen & speichern', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                      leading: const Icon(Icons.tune_rounded, size: 18, color: AppTheme.darkTextMuted),
+                      title: const Text(
+                        'Manuelle Zugangsdaten & WebDAV (Erweitert)',
+                        style: TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary, fontWeight: FontWeight.w500),
+                      ),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      children: [
+                        const Divider(color: AppTheme.darkBorder, height: 1),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _serverUrlController,
+                          decoration: const InputDecoration(
+                            labelText: 'Server-URL',
+                            hintText: 'https://cloud.mein-orchester.de',
+                            prefixIcon: Icon(Icons.link_rounded),
+                          ),
+                          onChanged: (_) => _saveAccount(),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _usernameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Benutzername / E-Mail',
+                            prefixIcon: Icon(Icons.account_circle_rounded),
+                          ),
+                          onChanged: (_) => _saveAccount(),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Passwort / App-Token',
+                            prefixIcon: Icon(Icons.lock_rounded),
+                          ),
+                          onChanged: (_) => _saveAccount(),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _rootFolderController,
+                          decoration: const InputDecoration(
+                            labelText: 'Notenordner',
+                            hintText: '/Noten',
+                            prefixIcon: Icon(Icons.folder_rounded),
+                          ),
+                          onChanged: (_) => _saveAccount(),
+                        ),
+                        const SizedBox(height: 14),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _isTestingConnection ? null : _testConnection,
+                          icon: _isTestingConnection
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.wifi_tethering_rounded, size: 18),
+                          label: const Text('Verbindung testen & speichern', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
