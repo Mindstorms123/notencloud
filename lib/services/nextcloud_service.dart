@@ -456,57 +456,76 @@ class NextcloudService {
     return file;
   }
 
-  /// Ensures that the central setlist directory exists on Nextcloud (`_Setlisten/`)
-  Future<bool> ensureSetlistFolderExists() async {
-    final setlistPath = '${account.cleanRootFolder}/_Setlisten';
-    return await ensureDirectoryExists(setlistPath);
+  /// Returns the relative paths for setlists to try, in priority order:
+  /// 1. `/_Setlisten` (shared across the entire orchestra / group Aktive with full read/write 31)
+  /// 2. `${account.cleanRootFolder}/_Setlisten` (e.g. `/Noten/_Setlisten` if available inside Noten)
+  List<String> get _candidateSetlistPaths {
+    final list = <String>['/_Setlisten'];
+    final rootSetlists = '${account.cleanRootFolder}/_Setlisten';
+    if (!list.contains(rootSetlists)) {
+      list.add(rootSetlists);
+    }
+    return list;
   }
 
-  /// Fetch all setlists from the Nextcloud `_Setlisten/` directory
+  /// Ensures that a writable setlist directory exists on Nextcloud
+  Future<bool> ensureSetlistFolderExists() async {
+    // Try /_Setlisten first (our primary writable shared group folder)
+    final rootOk = await ensureDirectoryExists('/_Setlisten');
+    if (rootOk) return true;
+
+    // Fall back to cleanRootFolder/_Setlisten
+    final altPath = '${account.cleanRootFolder}/_Setlisten';
+    return await ensureDirectoryExists(altPath);
+  }
+
+  /// Fetch all setlists from Nextcloud (checking both `/_Setlisten` and `${account.cleanRootFolder}/_Setlisten`)
   Future<List<Setlist>> fetchSetlists() async {
     await ensureSetlistFolderExists();
 
-    final setlistPath = '${account.cleanRootFolder}/_Setlisten';
-    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
+    final Map<String, Setlist> setlistsById = {};
 
-    final request = http.Request('PROPFIND', url)
-      ..headers.addAll(_headers)
-      ..headers['Depth'] = '1';
-
-    final response = await _client.send(request);
-    if (response.statusCode != 207) return [];
-
-    final body = await response.stream.bytesToString();
-    final document = xml.XmlDocument.parse(body);
-
-    final List<Setlist> setlists = [];
-    final responses = document.findAllElements('d:response').isNotEmpty
-        ? document.findAllElements('d:response')
-        : document.findAllElements('D:response');
-
-    for (final res in responses) {
-      final hrefEl = res.findElements('d:href').isNotEmpty
-          ? res.findElements('d:href').first
-          : res.findElements('D:href').firstOrNull;
-      if (hrefEl == null) continue;
-
-      final href = Uri.decodeFull(hrefEl.innerText);
-      if (!href.toLowerCase().endsWith('.json')) continue;
-
-      // Download and parse setlist JSON
+    for (final path in _candidateSetlistPaths) {
+      final url = Uri.parse('${account.webDavBaseUrl}$path');
       try {
-        final getUrl = Uri.parse('${account.cleanServerUrl}$href');
-        final getRes = await _client.get(getUrl, headers: _headers);
-        if (getRes.statusCode == 200) {
-          final jsonMap = jsonDecode(utf8.decode(getRes.bodyBytes)) as Map<String, dynamic>;
-          setlists.add(Setlist.fromJson(jsonMap).copyWith(isSyncedWithCloud: true));
+        final request = http.Request('PROPFIND', url)
+          ..headers.addAll(_headers)
+          ..headers['Depth'] = '1';
+
+        final response = await _client.send(request);
+        if (response.statusCode != 207) continue;
+
+        final body = await response.stream.bytesToString();
+        final document = xml.XmlDocument.parse(body);
+
+        final responses = document.findAllElements('d:response').isNotEmpty
+            ? document.findAllElements('d:response')
+            : document.findAllElements('D:response');
+
+        for (final res in responses) {
+          final hrefEl = res.findElements('d:href').isNotEmpty
+              ? res.findElements('d:href').first
+              : res.findElements('D:href').firstOrNull;
+          if (hrefEl == null) continue;
+
+          final href = Uri.decodeFull(hrefEl.innerText);
+          if (!href.toLowerCase().endsWith('.json')) continue;
+
+          // Download and parse setlist JSON
+          try {
+            final getUrl = Uri.parse('${account.cleanServerUrl}$href');
+            final getRes = await _client.get(getUrl, headers: _headers);
+            if (getRes.statusCode == 200) {
+              final jsonMap = jsonDecode(utf8.decode(getRes.bodyBytes)) as Map<String, dynamic>;
+              final s = Setlist.fromJson(jsonMap).copyWith(isSyncedWithCloud: true);
+              setlistsById[s.id] = s;
+            }
+          } catch (_) {}
         }
-      } catch (_) {
-        // Skip malformed files
-      }
+      } catch (_) {}
     }
 
-    return setlists;
+    return setlistsById.values.toList();
   }
 
   /// Check write permission for the setlists folder
@@ -514,42 +533,51 @@ class NextcloudService {
     return await ensureSetlistFolderExists();
   }
 
-  /// Upload a setlist JSON file to Nextcloud `_Setlisten/<id>.json`
+  /// Upload a setlist JSON file to Nextcloud
   Future<bool> uploadSetlist(Setlist setlist) async {
-    final ok = await ensureSetlistFolderExists();
-    if (!ok) return false;
-
-    final setlistPath = '${account.cleanRootFolder}/_Setlisten/${setlist.id}.json';
-    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
     final content = jsonEncode(setlist.toJson());
 
-    try {
-      final res = await _client.put(
-        url,
-        headers: {
-          ..._headers,
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-        body: utf8.encode(content),
-      );
+    // Try each candidate path (/_Setlisten, then /Noten/_Setlisten)
+    for (final path in _candidateSetlistPaths) {
+      final ok = await ensureDirectoryExists(path);
+      if (!ok) continue;
 
-      return res.statusCode == 201 || res.statusCode == 204;
-    } catch (_) {
-      return false;
+      final setlistFilePath = '$path/${setlist.id}.json';
+      final url = Uri.parse('${account.webDavBaseUrl}$setlistFilePath');
+
+      try {
+        final res = await _client.put(
+          url,
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          body: utf8.encode(content),
+        );
+
+        if (res.statusCode == 201 || res.statusCode == 204) {
+          return true;
+        }
+      } catch (_) {}
     }
+    return false;
   }
 
   /// Delete a setlist JSON file from Nextcloud
   Future<bool> deleteSetlist(String setlistId) async {
-    final setlistPath = '${account.cleanRootFolder}/_Setlisten/$setlistId.json';
-    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
+    bool anyDeleted = false;
+    for (final path in _candidateSetlistPaths) {
+      final setlistFilePath = '$path/$setlistId.json';
+      final url = Uri.parse('${account.webDavBaseUrl}$setlistFilePath');
 
-    try {
-      final res = await _client.delete(url, headers: _headers);
-      return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 404;
-    } catch (_) {
-      return false;
+      try {
+        final res = await _client.delete(url, headers: _headers);
+        if (res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 404) {
+          anyDeleted = true;
+        }
+      } catch (_) {}
     }
+    return anyDeleted;
   }
 
   /// Ensures that all directory levels exist on Nextcloud, creating missing ones via MKCOL

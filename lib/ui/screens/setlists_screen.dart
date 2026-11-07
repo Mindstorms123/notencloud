@@ -397,7 +397,10 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                Row(
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
                                   children: [
                                     Text(
                                       '$playableSongs ${playableSongs == 1 ? "Stück" : "Stücke"}',
@@ -406,15 +409,6 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                                         color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '• ${widget.profile.displayName}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
                                     if (setlist.isSyncedWithCloud)
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

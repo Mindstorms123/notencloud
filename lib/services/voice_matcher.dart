@@ -464,6 +464,38 @@ class VoiceMatcher {
     return findDetailedMatchForSong(song, profile)?.part;
   }
 
+  /// Returns a clean, user-friendly voice label (e.g. "Trompete 1 in Bb" or "Pauken")
+  /// avoiding redundant song title prefixes and ".pdf" extensions.
+  static String getPartDisplayLabel(PartFile part) {
+    if (part.detectedInstrument == 'Percussion') {
+      final sub = detectPercussionSubInstrument(part.fileName);
+      if (part.detectedVoice > 0) {
+        return '$sub ${part.detectedVoice}';
+      }
+      return sub;
+    }
+
+    if (part.detectedInstrument.isNotEmpty && part.detectedInstrument != 'Zusatzstimme') {
+      final buf = StringBuffer(part.detectedInstrument);
+      if (part.detectedVoice > 0) {
+        buf.write(' ${part.detectedVoice}');
+      }
+      if (part.detectedKey.isNotEmpty) {
+        buf.write(' in ${part.detectedKey}');
+      }
+      return buf.toString();
+    }
+
+    var clean = part.fileName.replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '').trim();
+    if (clean.contains(' - ')) {
+      final afterHyphen = clean.split(' - ').last.trim();
+      if (afterHyphen.isNotEmpty) {
+        return afterHyphen;
+      }
+    }
+    return clean;
+  }
+
   /// Extracts all distinct instruments present in the library,
   /// ordered by orchestral score order.
   static List<String> getAvailableInstruments(List<Song> songs) {

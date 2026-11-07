@@ -112,7 +112,7 @@ echo -e "${GREEN}✓ Installation erfolgreich abgeschlossen!${NC}\n"
 # 4. App starten (optional)
 if [ "$LAUNCH_AFTER" = "true" ]; then
     echo -e "${BLUE}▶ 4. Starte Notencloud auf ${DEVICE_MODEL}...${NC}"
-    adb -s "$TARGET_DEVICE" shell am start -n de.blasorchester1862.notencloud/.MainActivity > /dev/null 2>&1 || true
+    adb -s "$TARGET_DEVICE" shell am start -n de.notenapp.notencloud/.MainActivity > /dev/null 2>&1 || true
     echo -e "${GREEN}✓ App gestartet!${NC}\n"
 fi
 

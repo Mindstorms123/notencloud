@@ -89,23 +89,6 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
     });
 
     try {
-      final hasPerm = await widget.nextcloudService!.hasSetlistWritePermission();
-      if (!hasPerm) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: AppTheme.amber,
-              content: Text(
-                  'Keine Schreibberechtigung auf Nextcloud/_Setlisten. Setlist bleibt lokal gespeichert.'),
-            ),
-          );
-        }
-        setState(() {
-          _isSavingToCloud = false;
-        });
-        return;
-      }
-
       final success = await widget.nextcloudService!.uploadSetlist(_setlist);
       if (success) {
         setState(() {
@@ -121,7 +104,15 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
           );
         }
       } else {
-        throw Exception('Upload fehlgeschlagen');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: AppTheme.amber,
+              content: Text(
+                  'Upload fehlgeschlagen. Bitte Verbindung und Nextcloud-Speicher prüfen.'),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -250,7 +241,7 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                                   ),
                                   subtitle: Text(
                                     bestMatch != null
-                                        ? '✓ ${bestMatch.fileName}'
+                                        ? '✓ ${VoiceMatcher.getPartDisplayLabel(bestMatch)}'
                                         : '${song.parts.length} Stimmen vorhanden',
                                     style: TextStyle(
                                       color: bestMatch != null
@@ -749,46 +740,72 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                                             children: [
                                               if (bestMatch != null)
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                   decoration: BoxDecoration(
                                                     color: isFallback
                                                         ? AppTheme.amber.withValues(alpha: 0.15)
                                                         : AppTheme.emerald.withValues(alpha: 0.12),
                                                     borderRadius: BorderRadius.circular(6),
-                                                  ),
-                                                  child: Text(
-                                                    isFallback
-                                                        ? (widget.profile.instrument == 'Percussion' &&
-                                                                widget.profile.percussionInstrument.isNotEmpty &&
-                                                                widget.profile.percussionInstrument != 'Alle'
-                                                            ? 'Keine ${widget.profile.percussionInstrument} • Ersatz: ${bestMatch.fileName}'
-                                                            : (widget.profile.voiceNumber > 0
-                                                                ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
-                                                                : 'Ersatz: ${bestMatch.fileName}'))
-                                                        : (song.isDocumentOrList ? 'Dokument / Liste (alle Stimmen)' : bestMatch.fileName),
-                                                    style: TextStyle(
-                                                      fontSize: 11,
+                                                    border: Border.all(
                                                       color: isFallback
-                                                          ? AppTheme.amber
-                                                          : AppTheme.emerald,
-                                                      fontWeight: FontWeight.w600,
+                                                          ? AppTheme.amber.withValues(alpha: 0.3)
+                                                          : AppTheme.emerald.withValues(alpha: 0.25),
                                                     ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        isFallback ? Icons.info_outline_rounded : Icons.check_circle_rounded,
+                                                        size: 13,
+                                                        color: isFallback ? AppTheme.amber : AppTheme.emerald,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        isFallback
+                                                            ? (widget.profile.instrument == 'Percussion' &&
+                                                                    widget.profile.percussionInstrument.isNotEmpty &&
+                                                                    widget.profile.percussionInstrument != 'Alle'
+                                                                ? 'Keine ${widget.profile.percussionInstrument} • Ersatz: ${VoiceMatcher.getPartDisplayLabel(bestMatch)}'
+                                                                : (widget.profile.voiceNumber > 0
+                                                                    ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${VoiceMatcher.getPartDisplayLabel(bestMatch)}'
+                                                                    : 'Ersatz: ${VoiceMatcher.getPartDisplayLabel(bestMatch)}'))
+                                                            : (song.isDocumentOrList
+                                                                ? 'Dokument / Liste (alle Stimmen)'
+                                                                : VoiceMatcher.getPartDisplayLabel(bestMatch)),
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: isFallback
+                                                              ? AppTheme.amber
+                                                              : AppTheme.emerald,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 )
                                               else
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.white.withValues(alpha: 0.08),
+                                                    color: Colors.white.withValues(alpha: 0.06),
                                                     borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: Colors.white12),
                                                   ),
-                                                  child: Text(
-                                                    'Keine ${widget.profile.displayName}',
-                                                    style: const TextStyle(
-                                                      fontSize: 11,
-                                                      color: AppTheme.darkTextMuted,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.music_off_rounded, size: 13, color: AppTheme.darkTextMuted),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        'Keine ${widget.profile.displayName}',
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          color: AppTheme.darkTextMuted,
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               if (item.notes.isNotEmpty)
