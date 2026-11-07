@@ -61,6 +61,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   String? _localPdfPath;
   String? _errorMessage;
   bool _isFullscreen = false;
+  double? _baseFitZoom;
+  bool _isFitWidth = true;
 
   @override
   void initState() {
@@ -72,10 +74,52 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     _preparePdf();
   }
 
+  void _zoomIn() {
+    if (_pdfController?.isReady == true) {
+      final current = _pdfController!.currentZoom;
+      final newZoom = (current * 1.25).clamp(_pdfController!.minScale, _pdfController!.maxScale);
+      _pdfController!.setZoom(_pdfController!.centerPosition, newZoom);
+    }
+  }
+
+  void _zoomOut() {
+    if (_pdfController?.isReady == true) {
+      final current = _pdfController!.currentZoom;
+      final newZoom = (current / 1.25).clamp(_pdfController!.minScale, _pdfController!.maxScale);
+      _pdfController!.setZoom(_pdfController!.centerPosition, newZoom);
+    }
+  }
+
+  void _toggleZoomFit() {
+    if (_pdfController?.isReady == true) {
+      if (_isFitWidth) {
+        // Toggle to Fit Page (show entire page height)
+        final matrix = _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
+        if (matrix != null) {
+          _pdfController!.goTo(matrix);
+          setState(() {
+            _isFitWidth = false;
+          });
+        }
+      } else {
+        // Toggle to Fit Width (fill readable page width)
+        final matrix = _pdfController!.calcMatrixFitWidthForPage(pageNumber: _currentPage) ??
+            _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
+        if (matrix != null) {
+          _pdfController!.goTo(matrix);
+          setState(() {
+            _isFitWidth = true;
+          });
+        }
+      }
+    }
+  }
+
   Future<void> _preparePdf() async {
     setState(() {
       _isLoadingPdf = true;
       _errorMessage = null;
+      _baseFitZoom = null;
     });
 
     try {
@@ -156,6 +200,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _pageAnnotations.clear();
       _undoHistory.clear();
       _currentPage = 1;
+      _baseFitZoom = null;
+      _isFitWidth = true;
     });
     _preparePdf();
   }
@@ -201,6 +247,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _currentPart = bestMatch;
       _pageAnnotations.clear();
       _currentPage = 1;
+      _baseFitZoom = null;
+      _isFitWidth = true;
     });
     _preparePdf();
   }
@@ -390,55 +438,65 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               ),
             )
           else if (_localPdfPath != null)
-            GestureDetector(
-              onDoubleTap: () {
-                setState(() {
-                  _isFullscreen = !_isFullscreen;
-                });
-              },
-              child: PdfViewer.file(
-                _localPdfPath!,
-                controller: _pdfController,
-                params: PdfViewerParams(
-                  backgroundColor: Colors.black,
-                  onPageChanged: (page) {
-                    if (page != null) {
-                      setState(() {
-                        _currentPage = page;
-                      });
-                      _loadPageAnnotations(page);
-                    }
-                  },
-                  onDocumentChanged: (document) {
-                    if (document != null) {
-                      setState(() {
-                        _pageCount = document.pages.length;
-                      });
-                    }
-                  },
-                  pageOverlaysBuilder: (context, pageRect, page) {
-                    if (page.pageNumber != _currentPage) {
-                      return [];
-                    }
-                    return [
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        width: pageRect.width,
-                        height: pageRect.height,
-                        child: AnnotationCanvas(
-                          annotations: currentAnn,
-                          isDrawingActive: _isDrawingActive,
-                          activeTool: _activeTool,
-                          activeColor: _activeColor,
-                          activeStrokeWidth: _activeStrokeWidth,
-                          pageSize: Size(pageRect.width, pageRect.height),
-                          onAnnotationsChanged: _onAnnotationsChanged,
-                        ),
+            PdfViewer.file(
+              _localPdfPath!,
+              controller: _pdfController,
+              params: PdfViewerParams(
+                backgroundColor: Colors.black,
+                onGeneralTap: (context, controller, details) {
+                  if (_isDrawingActive) return false;
+                  if (details.type == PdfViewerGeneralTapType.doubleTap) {
+                    setState(() {
+                      _isFullscreen = !_isFullscreen;
+                    });
+                    return true;
+                  }
+                  return false;
+                },
+                onViewerReady: (document, controller) {
+                  if (mounted) {
+                    setState(() {
+                      _baseFitZoom = controller.currentZoom;
+                    });
+                  }
+                },
+                onPageChanged: (page) {
+                  if (page != null) {
+                    setState(() {
+                      _currentPage = page;
+                    });
+                    _loadPageAnnotations(page);
+                  }
+                },
+                onDocumentChanged: (document) {
+                  if (document != null) {
+                    setState(() {
+                      _pageCount = document.pages.length;
+                    });
+                  }
+                },
+                pageOverlaysBuilder: (context, pageRect, page) {
+                  if (page.pageNumber != _currentPage) {
+                    return [];
+                  }
+                  return [
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: pageRect.width,
+                      height: pageRect.height,
+                      child: AnnotationCanvas(
+                        annotations: currentAnn,
+                        isDrawingActive: _isDrawingActive,
+                        activeTool: _activeTool,
+                        activeColor: _activeColor,
+                        activeStrokeWidth: _activeStrokeWidth,
+                        pageSize: Size(pageRect.width, pageRect.height),
+                        onAnnotationsChanged: _onAnnotationsChanged,
                       ),
-                    ];
-                  },
-                ),
+                    ),
+                  ];
+                },
               ),
             ),
 
@@ -491,19 +549,44 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
             Positioned(
               top: _isFullscreen ? 16 : 8,
               right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.75),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.darkBorder),
-                ),
-                child: Text(
-                  'Seite $_currentPage / $_pageCount',
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                  onTap: _isFullscreen
+                      ? () {
+                          setState(() {
+                            _isFullscreen = false;
+                          });
+                        }
+                      : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.darkBorder),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Seite $_currentPage / $_pageCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        if (_isFullscreen) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.fullscreen_exit_rounded, color: AppTheme.primaryLight, size: 16),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
+
+          // Floating Zoom Controls (bottom left)
+          _buildZoomControls(),
 
           // Annotation Tools: Corner Pen Button when inactive, Full Toolbar when active, Hidden in Fullscreen
           if (!_isFullscreen && !_isLoadingPdf && _errorMessage == null)
@@ -613,65 +696,109 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+  }
 
-          // Top Swipe-to-Exit Handle (visible in Fullscreen)
-          if (_isFullscreen)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onVerticalDragUpdate: (details) {
-                  if (details.primaryDelta != null && details.primaryDelta!.abs() > 2) {
-                    setState(() {
-                      _isFullscreen = false;
-                    });
-                  }
-                },
-                onTap: () {
-                  setState(() {
-                    _isFullscreen = false;
-                  });
-                },
-                child: Container(
-                  height: 52,
-                  alignment: Alignment.topCenter,
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF13151D).withValues(alpha: 0.88),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+  Widget _buildZoomControls() {
+    if (_isDrawingActive || _isLoadingPdf || _errorMessage != null) {
+      return const SizedBox.shrink();
+    }
+
+    final controller = _pdfController;
+    if (controller == null) return const SizedBox.shrink();
+
+    return Positioned(
+      bottom: 24,
+      left: 20,
+      child: ValueListenableBuilder<Matrix4>(
+        valueListenable: controller,
+        builder: (context, matrix, _) {
+          final currentZoom = controller.isReady ? controller.currentZoom : 1.0;
+          final base = _baseFitZoom ??
+              (controller.isReady
+                  ? (controller.alternativeFitScale ?? controller.coverScale)
+                  : 1.0);
+          final percent = base > 0 ? ((currentZoom / base) * 100).round() : 100;
+
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(25),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF13151D).withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 14,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 4),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryLight, size: 16),
-                        SizedBox(width: 4),
-                        Text(
-                          'Wischen zum Beenden',
-                          style: TextStyle(
-                            color: AppTheme.darkTextPrimary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove_rounded, color: AppTheme.primaryLight, size: 20),
+                      tooltip: 'Verkleinern',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _zoomOut,
+                    ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _toggleZoomFit,
+                      child: Tooltip(
+                        message: _isFitWidth ? 'Auf ganze Seite einpassen' : 'Auf Seitenbreite einpassen',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _isFitWidth ? Icons.fit_screen_rounded : Icons.aspect_ratio_rounded,
+                                color: Colors.white70,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$percent%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    IconButton(
+                      icon: const Icon(Icons.add_rounded, color: AppTheme.primaryLight, size: 20),
+                      tooltip: 'Vergrößern',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _zoomIn,
+                    ),
+                  ],
                 ),
               ),
             ),
-        ],
+          );
+        },
       ),
     );
   }

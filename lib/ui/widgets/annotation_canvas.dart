@@ -686,38 +686,41 @@ class _AnnotationCanvasState extends State<AnnotationCanvas> {
     final w = widget.pageSize.width;
     final h = widget.pageSize.height;
 
-    return SizedBox(
-      width: w,
-      height: h,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // 1. Drawing Canvas & Touch Area
-          Positioned.fill(
-            child: Listener(
-              behavior: widget.isDrawingActive
-                  ? HitTestBehavior.opaque
-                  : HitTestBehavior.translucent,
-              onPointerDown: _handlePointerDown,
-              onPointerMove: _handlePointerMove,
-              onPointerUp: _handlePointerUp,
-              child: CustomPaint(
-                size: widget.pageSize,
-                painter: _AnnotationPainter(
-                  annotations: widget.annotations,
-                  currentPoints: _currentPoints,
-                  currentTool: widget.activeTool,
-                  currentColor: widget.activeColor,
-                  currentWidth: widget.activeStrokeWidth,
-                  pageSize: widget.pageSize,
+    return IgnorePointer(
+      ignoring: !widget.isDrawingActive,
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 1. Drawing Canvas & Touch Area
+            Positioned.fill(
+              child: Listener(
+                behavior: widget.isDrawingActive
+                    ? HitTestBehavior.opaque
+                    : HitTestBehavior.translucent,
+                onPointerDown: _handlePointerDown,
+                onPointerMove: _handlePointerMove,
+                onPointerUp: _handlePointerUp,
+                child: CustomPaint(
+                  size: widget.pageSize,
+                  painter: _AnnotationPainter(
+                    annotations: widget.annotations,
+                    currentPoints: _currentPoints,
+                    currentTool: widget.activeTool,
+                    currentColor: widget.activeColor,
+                    currentWidth: widget.activeStrokeWidth,
+                    pageSize: widget.pageSize,
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // 2. Interactive Text Notes Overlay
-          ...widget.annotations.textNotes.map((note) => _buildTextNoteWidget(note, w, h)),
-        ],
+            // 2. Interactive Text Notes Overlay
+            ...widget.annotations.textNotes.map((note) => _buildTextNoteWidget(note, w, h)),
+          ],
+        ),
       ),
     );
   }
