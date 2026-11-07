@@ -122,19 +122,25 @@ class StorageService {
       final songs = list.map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
       return songs.map((song) {
         final sanitizedParts = song.parts.map((p) {
-          var inst = p.detectedInstrument.trim();
+          final reparsed = VoiceMatcher.parsePartFileName(p.fileName, p.songId, p.remotePath);
+          var inst = reparsed.detectedInstrument.trim();
           if (inst == 'Schlagzeug' || inst == 'Pauken' || inst == 'Glockenspiel') {
             inst = 'Percussion';
           }
-          if (VoiceMatcher.knownRealInstruments.contains(inst) ||
-              inst == 'Partitur' ||
-              inst == 'Direktion' ||
-              inst == 'Zusatzstimme' ||
-              inst == 'Dokument') {
-            return p.copyWith(detectedInstrument: inst);
-          }
-          // Legacy/bogus instrument name (e.g. "Wonderful Christmas") -> sanitize to Zusatzstimme
-          return p.copyWith(detectedInstrument: 'Zusatzstimme');
+          final validInst = (VoiceMatcher.knownRealInstruments.contains(inst) ||
+                  inst == 'Partitur' ||
+                  inst == 'Direktion' ||
+                  inst == 'Zusatzstimme' ||
+                  inst == 'Dokument')
+              ? inst
+              : 'Zusatzstimme';
+
+          return p.copyWith(
+            detectedInstrument: validInst,
+            detectedVoice: reparsed.detectedVoice,
+            detectedKey: reparsed.detectedKey,
+            isCombinedVoice: reparsed.isCombinedVoice,
+          );
         }).toList();
         return song.copyWith(parts: sanitizedParts);
       }).toList();

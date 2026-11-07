@@ -1510,7 +1510,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: const Text('Alle Pedale (Standard)'),
                     onSelected: (sel) {
                       if (sel) {
-                        _updatePedalSettings(_pedalSettings.copyWith(selectedDeviceName: null));
+                        _updatePedalSettings(_pedalSettings.copyWith(clearSelectedDevice: true));
                       }
                     },
                   ),
@@ -1523,7 +1523,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       selectedColor: AppTheme.emerald.withValues(alpha: 0.25),
                       onSelected: (sel) {
                         _updatePedalSettings(
-                          _pedalSettings.copyWith(selectedDeviceName: sel ? dev.name : null),
+                          sel
+                              ? _pedalSettings.copyWith(selectedDeviceName: dev.name)
+                              : _pedalSettings.copyWith(clearSelectedDevice: true),
                         );
                       },
                     );

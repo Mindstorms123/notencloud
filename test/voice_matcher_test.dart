@@ -162,5 +162,28 @@ void main() {
       expect(match!.part.fileName, 'Schlagzeug.pdf');
       expect(match.quality, MatchQuality.fallback);
     });
+
+    test('English titles containing "I" do not distort Arabic voice numbers like Trompete 2', () {
+      final tpt1 = VoiceMatcher.parsePartFileName('And I Love Her - Trompete 1.pdf', 's', '/p1');
+      final tpt2 = VoiceMatcher.parsePartFileName('And I Love Her - Trompete 2 in Bb.pdf', 's', '/p2');
+
+      expect(tpt1.detectedInstrument, 'Trompete');
+      expect(tpt1.detectedVoice, 1);
+
+      expect(tpt2.detectedInstrument, 'Trompete');
+      expect(tpt2.detectedVoice, 2);
+      expect(tpt2.detectedKey, 'Bb');
+
+      const profileTpt1 = MusicianProfile(
+        instrument: 'Trompete',
+        voiceNumber: 1,
+        keyOrClef: 'Bb',
+      );
+
+      final bestMatch = VoiceMatcher.findDetailedMatch([tpt1, tpt2], profileTpt1);
+      expect(bestMatch, isNotNull);
+      expect(bestMatch!.part.fileName, 'And I Love Her - Trompete 1.pdf');
+      expect(bestMatch.quality, MatchQuality.exact);
+    });
   });
 }

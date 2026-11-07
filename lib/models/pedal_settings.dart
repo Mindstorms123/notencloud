@@ -86,6 +86,7 @@ class PedalSettings {
     bool? setlistAutoAdvance,
     bool? setlistAutoRewind,
     String? selectedDeviceName,
+    bool clearSelectedDevice = false,
   }) {
     return PedalSettings(
       enabled: enabled ?? this.enabled,
@@ -96,7 +97,7 @@ class PedalSettings {
       customPrevKeyLabel: customPrevKeyLabel ?? this.customPrevKeyLabel,
       setlistAutoAdvance: setlistAutoAdvance ?? this.setlistAutoAdvance,
       setlistAutoRewind: setlistAutoRewind ?? this.setlistAutoRewind,
-      selectedDeviceName: selectedDeviceName ?? this.selectedDeviceName,
+      selectedDeviceName: clearSelectedDevice ? null : (selectedDeviceName ?? this.selectedDeviceName),
     );
   }
 

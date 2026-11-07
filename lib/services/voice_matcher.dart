@@ -218,31 +218,86 @@ class VoiceMatcher {
     final norm = normalize(cleanName);
     final normHint = normalize(instrumentHint);
 
+    // If the file name has a " - " or " – " separator (SongTitle - PartName), focus voice detection on the part name!
+    String voiceSearchText = norm;
+    if (norm.contains(' - ')) {
+      voiceSearchText = norm.split(' - ').last;
+    } else if (norm.contains(' – ')) {
+      voiceSearchText = norm.split(' – ').last;
+    }
+
     // 1. Detect voice numbers
     int voice = 0;
     bool isCombined = false;
 
-    // Check combined patterns on lowerClean: "1-2", "1_2", "1+2", "1 u 2", "1&2", "1/2"
-    if (RegExp(r'(?:^|[^0-9])1\s*[-+&_u/]\s*2(?:$|[^0-9])').hasMatch(lowerClean) ||
+    // Check combined patterns: "1-2", "1_2", "1+2", "1 u 2", "1&2", "1/2"
+    if (RegExp(r'(?:^|[^0-9])1\s*[-+&_u/]\s*2(?:$|[^0-9])').hasMatch(voiceSearchText) ||
+        RegExp(r'(?:^|[^0-9])1\s*[-+&_u/]\s*2(?:$|[^0-9])').hasMatch(lowerClean)) {
+      isCombined = true;
+      voice = 1;
+    } else if (RegExp(r'(?:^|[^0-9])3\s*[-+&_u/]\s*4(?:$|[^0-9])').hasMatch(voiceSearchText) ||
         RegExp(r'(?:^|[^0-9])3\s*[-+&_u/]\s*4(?:$|[^0-9])').hasMatch(lowerClean)) {
       isCombined = true;
-      if (lowerClean.contains('1')) voice = 1;
-      if (lowerClean.contains('3')) voice = 3;
+      voice = 3;
     } else {
-      // Roman numerals
-      if (RegExp(r'\biv\b').hasMatch(norm)) {
-        voice = 4;
-      } else if (RegExp(r'\biii\b').hasMatch(norm)) {
-        voice = 3;
-      } else if (RegExp(r'\bii\b').hasMatch(norm)) {
-        voice = 2;
-      } else if (RegExp(r'\bi\b').hasMatch(norm)) {
-        voice = 1;
-      } else {
-        // Arabic numerals
-        final match = RegExp(r'\b([1-9])(?:\.|\s*st|\s*nd|\s*rd|\s*th)?\b').firstMatch(norm);
+      // 1. Check instrument- or voice-adjacent number (e.g. "Trompete 2", "2. Trompete", "Flöte II", "Stimme 1")
+      final adjMatch = RegExp(
+        r'(?:trompete|trumpet|flöte|flute|klarinette|clarinet|sax|posaune|trombone|horn|tuba|stimme|voice|part)\s*([1-9]|iv|iii|ii|i)\b',
+      ).firstMatch(voiceSearchText);
+      if (adjMatch != null) {
+        final v = adjMatch.group(1)!;
+        if (v == 'iv') {
+          voice = 4;
+        } else if (v == 'iii') {
+          voice = 3;
+        } else if (v == 'ii') {
+          voice = 2;
+        } else if (v == 'i') {
+          voice = 1;
+        } else {
+          voice = int.tryParse(v) ?? 0;
+        }
+      }
+
+      if (voice == 0) {
+        final preMatch = RegExp(
+          r'\b([1-9]|iv|iii|ii|i)(?:\.|\s*st|\s*nd|\s*rd|\s*th)?\s*(?:trompete|trumpet|flöte|flute|klarinette|clarinet|sax|posaune|trombone|horn|tuba|stimme|voice|part)',
+        ).firstMatch(voiceSearchText);
+        if (preMatch != null) {
+          final v = preMatch.group(1)!;
+          if (v == 'iv') {
+            voice = 4;
+          } else if (v == 'iii') {
+            voice = 3;
+          } else if (v == 'ii') {
+            voice = 2;
+          } else if (v == 'i') {
+            voice = 1;
+          } else {
+            voice = int.tryParse(v) ?? 0;
+          }
+        }
+      }
+
+      // 2. Arabic numerals in voiceSearchText
+      if (voice == 0) {
+        final match = RegExp(r'\b([1-9])(?:\.|\s*st|\s*nd|\s*rd|\s*th)?\b').firstMatch(voiceSearchText);
         if (match != null) {
           voice = int.tryParse(match.group(1)!) ?? 0;
+        }
+      }
+
+      // 3. Roman numerals (strictly guarded so English pronoun "I" in titles never triggers voice 1!)
+      if (voice == 0) {
+        if (RegExp(r'\biv\b').hasMatch(voiceSearchText)) {
+          voice = 4;
+        } else if (RegExp(r'\biii\b').hasMatch(voiceSearchText)) {
+          voice = 3;
+        } else if (RegExp(r'\bii\b').hasMatch(voiceSearchText)) {
+          voice = 2;
+        } else if (RegExp(r'\b(i\.|\bstimme\s+i\b|\bpart\s+i\b)').hasMatch(voiceSearchText) ||
+            (voiceSearchText != norm && RegExp(r'\bi\b').hasMatch(voiceSearchText))) {
+          voice = 1;
         }
       }
     }

@@ -108,6 +108,13 @@ void main() {
       expect(loaded.setlistAutoAdvance, isFalse);
       expect(loaded.setlistAutoRewind, isTrue);
       expect(loaded.selectedDeviceName, 'PageFlip Firefly');
+
+      // Clear device back to null (Alle Pedale)
+      final cleared = loaded.copyWith(clearSelectedDevice: true);
+      expect(cleared.selectedDeviceName, isNull);
+      await storage.savePedalSettings(cleared);
+      final reloaded = storage.getPedalSettings();
+      expect(reloaded.selectedDeviceName, isNull);
     });
 
     test('ConnectedDevice deserializes from map correctly', () {
