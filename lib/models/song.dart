@@ -127,6 +127,14 @@ class Song {
     return cleaned.isEmpty ? folderName : cleaned;
   }
 
+  /// Whether this entry is an orchestra list, schedule, or general document
+  /// (e.g. from "Listen und Co") that has no instrument/voice distinction.
+  bool get isDocumentOrList =>
+      category.toLowerCase().contains('listen') ||
+      category.toLowerCase().contains('archiv') ||
+      remoteFolderPath.toLowerCase().contains('listen%20und%20co') ||
+      remoteFolderPath.toLowerCase().contains('listen und co');
+
   Song copyWith({
     String? id,
     String? title,

@@ -48,6 +48,71 @@ class NextcloudService {
     }
   }
 
+  /// Initialize Nextcloud Login Flow v2.
+  /// Generates the browser login URL and poll credentials.
+  static Future<({String loginUrl, String pollEndpoint, String pollToken})?> initLoginFlow(String serverUrl) async {
+    try {
+      var cleanServer = serverUrl.trim();
+      if (!cleanServer.startsWith('http://') && !cleanServer.startsWith('https://')) {
+        cleanServer = 'https://$cleanServer';
+      }
+      cleanServer = cleanServer.replaceAll(RegExp(r'/+$'), '');
+
+      final url = Uri.parse('$cleanServer/index.php/login/v2');
+      final response = await http.post(
+        url,
+        headers: {'User-Agent': 'Notencloud/1.0 (Android)'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final loginUrl = data['login'] as String?;
+        final poll = data['poll'] as Map<String, dynamic>?;
+        final pollEndpoint = poll?['endpoint'] as String?;
+        final pollToken = poll?['token'] as String?;
+
+        if (loginUrl != null && pollEndpoint != null && pollToken != null) {
+          return (
+            loginUrl: loginUrl,
+            pollEndpoint: pollEndpoint,
+            pollToken: pollToken,
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Poll the login flow endpoint once.
+  /// Returns credentials when approved by user in browser, or null if pending.
+  static Future<({String server, String loginName, String appPassword})?> pollLoginFlow(
+    String pollEndpoint,
+    String pollToken,
+  ) async {
+    try {
+      final url = Uri.parse(pollEndpoint);
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Notencloud/1.0 (Android)',
+        },
+        body: {'token': pollToken},
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final server = data['server'] as String? ?? '';
+        final loginName = data['loginName'] as String? ?? '';
+        final appPassword = data['appPassword'] as String? ?? '';
+        if (loginName.isNotEmpty && appPassword.isNotEmpty) {
+          return (server: server, loginName: loginName, appPassword: appPassword);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Helper to list items in a WebDAV folder
   Future<List<_DavItem>> _listFolder(String folderPath) async {
     final String fullUrl;
@@ -77,6 +142,7 @@ class NextcloudService {
         : document.findAllElements('D:response');
 
     final requestPath = url.path.endsWith('/') ? url.path : '${url.path}/';
+    final decodedRequestPath = Uri.decodeFull(requestPath);
 
     for (final res in responses) {
       final hrefEl = res.findElements('d:href').isNotEmpty
@@ -86,8 +152,12 @@ class NextcloudService {
 
       final href = Uri.decodeFull(hrefEl.innerText);
       final normalizedHref = href.endsWith('/') ? href : '$href/';
-      // Skip the folder itself
-      if (normalizedHref == requestPath) continue;
+      // Skip the folder itself (check both raw and decoded paths)
+      if (normalizedHref == decodedRequestPath ||
+          normalizedHref == requestPath ||
+          normalizedHref.replaceAll(RegExp(r'/+$'), '') == decodedRequestPath.replaceAll(RegExp(r'/+$'), '')) {
+        continue;
+      }
 
       final isCollection = res.findAllElements('d:collection').isNotEmpty ||
           res.findAllElements('D:collection').isNotEmpty;
@@ -134,12 +204,20 @@ class NextcloudService {
     final rootItems = await _listFolder(rootFolder);
     final List<Song> songs = [];
 
+    // Sanitize cached songs to eliminate any phantom category-as-song entries
+    final sanitizedCached = (existingCachedSongs ?? []).where((s) {
+      if (s.id == '01_Aktuelle Noten_01_Aktuelle Noten' || s.id == '02_Ältere Noten_02_Ältere Noten') return false;
+      if (s.folderName == '01_Aktuelle Noten' || s.folderName == '02_Ältere Noten') return false;
+      if ((s.title.toLowerCase() == 'aktuelle noten' || s.title.toLowerCase() == 'ältere noten') && s.parts.length > 50) return false;
+      return true;
+    }).toList();
+
     // Map existing cached songs by ID and folderName for instant lookup
     final Map<String, Song> cachedMap = {
-      for (final s in (existingCachedSongs ?? [])) s.id: s,
+      for (final s in sanitizedCached) s.id: s,
     };
     final Map<String, Song> cachedByFolderMap = {
-      for (final s in (existingCachedSongs ?? [])) s.folderName: s,
+      for (final s in sanitizedCached) s.folderName: s,
     };
 
     // Collect song folders that are either new or have changed ETags
@@ -161,6 +239,9 @@ class NextcloudService {
         // Category folder containing songs
         for (final songDir in subDirs) {
           if (songDir.name.startsWith('.')) continue;
+          // Guard: Never treat the category folder itself as a song!
+          if (songDir.name == item.name || songDir.href == item.href) continue;
+          if (Song.cleanTitleFromFolder(songDir.name).toLowerCase() == categoryName.toLowerCase()) continue;
           final songId = '${item.name}_${songDir.name}';
           final songTitle = Song.cleanTitleFromFolder(songDir.name);
 

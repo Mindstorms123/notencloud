@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import '../../models/annotation.dart';
@@ -55,6 +56,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   Color _activeColor = Colors.black87;
   double _activeStrokeWidth = 2.0;
   final Map<int, PageAnnotations> _pageAnnotations = {};
+  final Map<int, List<PageAnnotations>> _undoHistory = {};
   bool _isLoadingPdf = true;
   String? _localPdfPath;
   String? _errorMessage;
@@ -137,6 +139,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   }
 
   void _onAnnotationsChanged(PageAnnotations updated) {
+    final current = _pageAnnotations[_currentPage] ?? PageAnnotations(pageIndex: _currentPage);
+    _undoHistory.putIfAbsent(_currentPage, () => []).add(current);
+    if (_undoHistory[_currentPage]!.length > 30) {
+      _undoHistory[_currentPage]!.removeAt(0);
+    }
     setState(() {
       _pageAnnotations[_currentPage] = updated;
     });
@@ -147,6 +154,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     setState(() {
       _currentPart = newPart;
       _pageAnnotations.clear();
+      _undoHistory.clear();
       _currentPage = 1;
     });
     _preparePdf();
@@ -222,13 +230,23 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         _currentPart.detectedVoice == widget.profile.voiceNumber ||
         _currentPart.isCombinedVoice ||
         _currentPart.detectedVoice == 0;
-    final voiceColor = isExactVoice ? AppTheme.emerald : AppTheme.amber;
+    final isDoc = _currentSong.isDocumentOrList;
+    final voiceColor = isDoc
+        ? AppTheme.primaryLight
+        : (isExactVoice ? AppTheme.emerald : AppTheme.amber);
 
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: _isFullscreen
-          ? null
-          : AppBar(
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(_isFullscreen ? 0.0 : kToolbarHeight),
+        child: AnimatedSlide(
+          offset: _isFullscreen ? const Offset(0, -1) : Offset.zero,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeInOutCubic,
+          child: AnimatedOpacity(
+            opacity: _isFullscreen ? 0.0 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: AppBar(
               backgroundColor: AppTheme.darkSurface,
               foregroundColor: AppTheme.darkTextPrimary,
               elevation: 0,
@@ -271,9 +289,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            isExactVoice
+                            isDoc
                                 ? _currentPart.fileName
-                                : 'Keine ${widget.profile.voiceNumber}. Stimme • Ausweichstimme: ${_currentPart.fileName}',
+                                : (isExactVoice
+                                    ? _currentPart.fileName
+                                    : 'Keine ${widget.profile.voiceNumber}. Stimme • Ausweichstimme: ${_currentPart.fileName}'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -325,6 +345,9 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
       body: Stack(
         children: [
           // PDF Display
@@ -482,56 +505,169 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               ),
             ),
 
-          // Floating Annotation Toolbar (bottom center)
-          if (!_isLoadingPdf && _errorMessage == null)
+          // Annotation Tools: Corner Pen Button when inactive, Full Toolbar when active, Hidden in Fullscreen
+          if (!_isFullscreen && !_isLoadingPdf && _errorMessage == null)
+            if (!_isDrawingActive)
+              Positioned(
+                bottom: 24,
+                right: 20,
+                child: ClipOval(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF13151D).withValues(alpha: 0.88),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            blurRadius: 14,
+                            spreadRadius: 1,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.edit_rounded, color: AppTheme.primaryLight, size: 22),
+                        tooltip: 'Stift & Textnotizen',
+                        onPressed: () {
+                          setState(() {
+                            _isDrawingActive = true;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Positioned(
+                bottom: 24,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: AnnotationToolbar(
+                    isDrawingActive: _isDrawingActive,
+                    activeTool: _activeTool,
+                    activeColor: _activeColor,
+                    activeStrokeWidth: _activeStrokeWidth,
+                    onToggleDrawing: () {
+                      setState(() {
+                        _isDrawingActive = !_isDrawingActive;
+                      });
+                    },
+                    onSelectTool: (tool) {
+                      setState(() {
+                        _activeTool = tool;
+                        if (tool == StrokeType.highlighter) {
+                          _activeColor = const Color(0xFFFFEB3B);
+                          _activeStrokeWidth = 8.0;
+                        } else if (tool == StrokeType.pen) {
+                          _activeColor = Colors.black87;
+                          _activeStrokeWidth = 2.0;
+                        } else if (tool == StrokeType.text) {
+                          _activeColor = const Color(0xFFEF4444);
+                        }
+                      });
+                    },
+                    onSelectColor: (c) {
+                      setState(() {
+                        _activeColor = c;
+                      });
+                    },
+                    onUndo: () {
+                      final history = _undoHistory[_currentPage];
+                      if (history != null && history.isNotEmpty) {
+                        final previous = history.removeLast();
+                        setState(() {
+                          _pageAnnotations[_currentPage] = previous;
+                        });
+                        _saveCurrentAnnotations(_currentPage, previous);
+                      } else {
+                        if (currentAnn.textNotes.isNotEmpty) {
+                          final updated = List<TextNote>.from(currentAnn.textNotes)..removeLast();
+                          _onAnnotationsChanged(currentAnn.copyWith(textNotes: updated));
+                        } else if (currentAnn.strokes.isNotEmpty) {
+                          final updated = List<Stroke>.from(currentAnn.strokes)..removeLast();
+                          _onAnnotationsChanged(currentAnn.copyWith(strokes: updated));
+                        }
+                      }
+                    },
+                    onClearPage: () async {
+                      await widget.annotationService.clearPageAnnotations(
+                        _currentSong.id,
+                        _currentPart.id,
+                        _currentPage,
+                      );
+                      setState(() {
+                        _pageAnnotations[_currentPage] = PageAnnotations(pageIndex: _currentPage);
+                        _undoHistory[_currentPage]?.clear();
+                      });
+                    },
+                  ),
+                ),
+              ),
+
+          // Top Swipe-to-Exit Handle (visible in Fullscreen)
+          if (_isFullscreen)
             Positioned(
-              bottom: 24,
+              top: 0,
               left: 0,
               right: 0,
-              child: Center(
-                child: AnnotationToolbar(
-                  isDrawingActive: _isDrawingActive,
-                  activeTool: _activeTool,
-                  activeColor: _activeColor,
-                  activeStrokeWidth: _activeStrokeWidth,
-                  onToggleDrawing: () {
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragUpdate: (details) {
+                  if (details.primaryDelta != null && details.primaryDelta!.abs() > 2) {
                     setState(() {
-                      _isDrawingActive = !_isDrawingActive;
+                      _isFullscreen = false;
                     });
-                  },
-                  onSelectTool: (tool) {
-                    setState(() {
-                      _activeTool = tool;
-                      if (tool == StrokeType.highlighter) {
-                        _activeColor = const Color(0xFFFFEB3B);
-                        _activeStrokeWidth = 8.0;
-                      } else if (tool == StrokeType.pen) {
-                        _activeColor = Colors.black87;
-                        _activeStrokeWidth = 2.0;
-                      }
-                    });
-                  },
-                  onSelectColor: (c) {
-                    setState(() {
-                      _activeColor = c;
-                    });
-                  },
-                  onUndo: () {
-                    if (currentAnn.strokes.isNotEmpty) {
-                      final updated = List<Stroke>.from(currentAnn.strokes)..removeLast();
-                      _onAnnotationsChanged(currentAnn.copyWith(strokes: updated));
-                    }
-                  },
-                  onClearPage: () async {
-                    await widget.annotationService.clearPageAnnotations(
-                      _currentSong.id,
-                      _currentPart.id,
-                      _currentPage,
-                    );
-                    setState(() {
-                      _pageAnnotations[_currentPage] = PageAnnotations(pageIndex: _currentPage);
-                    });
-                  },
+                  }
+                },
+                onTap: () {
+                  setState(() {
+                    _isFullscreen = false;
+                  });
+                },
+                child: Container(
+                  height: 52,
+                  alignment: Alignment.topCenter,
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF13151D).withValues(alpha: 0.88),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.primaryLight, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Wischen zum Beenden',
+                          style: TextStyle(
+                            color: AppTheme.darkTextPrimary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

@@ -4,6 +4,7 @@ enum StrokeType {
   pen,
   highlighter,
   eraser,
+  text,
 }
 
 /// Normalized 2D coordinate on a PDF page (0.0 to 1.0)
@@ -63,7 +64,7 @@ class Stroke {
         colorValue: json['color'] as int? ?? 0xFF000000,
         width: (json['width'] as num?)?.toDouble() ?? 2.0,
         points: (json['points'] as List<dynamic>?)
-                ?.map((p) => Point2D.fromJson(p as Map<String, dynamic>))
+                ?.map((e) => Point2D.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             const [],
       );
@@ -76,16 +77,35 @@ class TextNote {
   final Point2D position;
   final int colorValue;
   final double fontSize;
+  final bool hasBackground;
 
   const TextNote({
     required this.id,
     required this.text,
     required this.position,
-    this.colorValue = 0xFFD32F2F, // default warning red
+    this.colorValue = 0xFFEF4444, // Default conductor red
     this.fontSize = 14.0,
+    this.hasBackground = true,
   });
 
   Color get color => Color(colorValue);
+
+  TextNote copyWith({
+    String? text,
+    Point2D? position,
+    int? colorValue,
+    double? fontSize,
+    bool? hasBackground,
+  }) {
+    return TextNote(
+      id: id,
+      text: text ?? this.text,
+      position: position ?? this.position,
+      colorValue: colorValue ?? this.colorValue,
+      fontSize: fontSize ?? this.fontSize,
+      hasBackground: hasBackground ?? this.hasBackground,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -93,14 +113,16 @@ class TextNote {
         'position': position.toJson(),
         'color': colorValue,
         'fontSize': fontSize,
+        'hasBg': hasBackground,
       };
 
   factory TextNote.fromJson(Map<String, dynamic> json) => TextNote(
         id: json['id'] as String,
         text: json['text'] as String,
         position: Point2D.fromJson(json['position'] as Map<String, dynamic>),
-        colorValue: json['color'] as int? ?? 0xFFD32F2F,
+        colorValue: json['color'] as int? ?? 0xFFEF4444,
         fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14.0,
+        hasBackground: json['hasBg'] as bool? ?? true,
       );
 }
 

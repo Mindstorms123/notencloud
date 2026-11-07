@@ -53,30 +53,34 @@ class VoiceMatcher {
     'oboe': ['oboe', 'hautbois'],
     'fagott': ['fagott', 'bassoon', 'fagotto'],
     'es-klarinette': ['es klarinette', 'eb clarinet', 'klarinette in es'],
-    'klarinette': ['klarinette', 'clarinet', 'clarinette', 'b klarinette', 'bb clarinet'],
+    'klarinette': ['klarinette', 'klarinnete', 'clarinet', 'clarinette', 'b klarinette', 'bb clarinet'],
     'bassklarinette': ['bassklarinette', 'bass clarinet'],
+    'sopransaxophon': ['sopran-sax', 'sopransax', 'sopran sax', 'soprano sax', 'soprano saxophone'],
     'altsaxophon': ['altsaxophon', 'altsax', 'alt sax', 'alto saxophone', 'alto sax', 'es altsaxophon'],
     'tenorsaxophon': ['tenorsaxophon', 'tenorsax', 'tenor sax', 'tenor saxophone', 'b tenorsaxophon'],
     'baritonsaxophon': ['baritonsaxophon', 'baritonsax', 'bariton sax', 'baritone sax', 'baritone saxophone'],
-    'trompete': ['trompete', 'trumpet', 'trompette', 'b trompete', 'bb trumpet', 'trpt'],
+    'trompete': ['trompete', 'trompe', 'trumpet', 'trompette', 'b trompete', 'bb trumpet', 'trpt'],
     'flügelhorn': ['fluegelhorn', 'flugelhorn', 'fluegel', 'b fluegelhorn'],
     'waldhorn': ['waldhorn', 'horn', 'f horn', 'french horn', 'es horn', 'in f', 'in es'],
-    'posaune': ['posaune', 'trombone', 'tbne', 'bassposaune', 'tenorposaune'],
+    'posaune': ['posaune', 'posauen', 'trombone', 'tbne', 'bassposaune', 'tenorposaune'],
     'tenorhorn': ['tenorhorn', 'tenor horn', 'tenorhorn in b'],
     'bariton': ['bariton', 'baritone', 'bariton in b', 'bariton in c'],
     'euphonium': ['euphonium', 'euph'],
-    'tuba': ['tuba', 'bass', 'baesse', 'bässe', 'b tuba', 'c tuba', 'es tuba', 'f tuba', 'sousaphon'],
+    'tuba': ['tuba', 'tuben', 'baesse', 'bässe', 'b tuba', 'c tuba', 'es tuba', 'f tuba', 'sousaphon'],
     'schlagzeug': ['schlagzeug', 'drums', 'drum set', 'drumset', 'batterie'],
     'pauken': ['pauken', 'timpani', 'kettledrums'],
     'percussion': ['percussion', 'perkussion', 'mallets', 'becken', 'grosse trommel', 'triangel'],
     'glockenspiel': ['glockenspiel', 'xylophon', 'marimba', 'vibraphon', 'bells'],
     'klavier': ['klavier', 'piano', 'keyboard'],
+    'gitarre': ['gitarre', 'guitar', 'e gitarre', 'egitarre', 'akustikgitarre', 'acoustic guitar'],
     'e-bass': ['e bass', 'ebass', 'electric bass', 'bassgitarre'],
+    'gesang': ['gesang', 'vocal', 'vocals', 'solo & chor', 'chor', 'voice'],
+    'harfe': ['harfe', 'harp'],
     'violine': ['violine', 'geige', 'violin', 'violino'],
     'viola': ['viola', 'bratsche'],
     'violoncello': ['violoncello', 'cello'],
     'kontrabass': ['kontrabass', 'double bass', 'string bass'],
-    'partitur': ['partitur', 'full score', 'score', 'condensed score'],
+    'partitur': ['partitur', 'patitur', 'patitiur', 'full score', 'score', 'condensed score', 'gesamt', 'stimmen tutti', 'tutti'],
     'direktion': ['direktion', 'direktion in c', 'direktion in b', 'conductor', 'lead sheet'],
   };
 
@@ -164,10 +168,12 @@ class VoiceMatcher {
       }
     }
 
-    // Capitalize canonical instrument for display
+    // Capitalize canonical instrument for display, or mark as Zusatzstimme if unrecognized
     final displayInstrument = detectedInstrument.isNotEmpty
         ? detectedInstrument[0].toUpperCase() + detectedInstrument.substring(1)
-        : (instrumentHint.isNotEmpty ? instrumentHint : cleanName);
+        : (instrumentHint.isNotEmpty
+            ? instrumentHint[0].toUpperCase() + instrumentHint.substring(1)
+            : 'Zusatzstimme');
 
     return PartFile(
       id: '$songId-$cleanName',
@@ -295,5 +301,95 @@ class VoiceMatcher {
   /// Returns null if no compatible part for this instrument/voice exists.
   static PartFile? findBestMatch(List<PartFile> parts, MusicianProfile profile) {
     return findDetailedMatch(parts, profile)?.part;
+  }
+
+  /// Finds the best matching part file for a song.
+  /// If the song is a general list/document (e.g. from "Listen und Co"),
+  /// it is always treated as an exact match for all musicians without instrument distinction.
+  static DetailedMatch? findDetailedMatchForSong(Song song, MusicianProfile profile) {
+    if (song.parts.isEmpty) return null;
+    if (song.isDocumentOrList) {
+      return DetailedMatch(
+        part: song.parts.first,
+        quality: MatchQuality.exact,
+        requestedVoice: profile.voiceNumber,
+        actualVoice: 0,
+        reason: 'Dokument / Liste für alle Stimmen',
+      );
+    }
+    return findDetailedMatch(song.parts, profile);
+  }
+
+  static PartFile? findBestMatchForSong(Song song, MusicianProfile profile) {
+    return findDetailedMatchForSong(song, profile)?.part;
+  }
+
+  /// Extracts all distinct instruments present in the library,
+  /// ordered by orchestral score order.
+  static List<String> getAvailableInstruments(List<Song> songs) {
+    final discovered = <String>{};
+    for (final s in songs) {
+      for (final p in s.parts) {
+        final inst = p.detectedInstrument.trim();
+        if (inst.isNotEmpty &&
+            inst != 'Zusatzstimme' &&
+            inst != 'Dokument' &&
+            inst != 'Partitur' &&
+            inst != 'Direktion' &&
+            !inst.contains('.pdf') &&
+            !inst.contains('/') &&
+            !inst.contains(' - ') &&
+            !inst.contains('(') &&
+            !inst.contains(')') &&
+            !inst.toLowerCase().contains('stimmen') &&
+            inst.length < 24) {
+          discovered.add(inst);
+        }
+      }
+    }
+
+    if (discovered.isEmpty) {
+      return [
+        'Flöte',
+        'Klarinette',
+        'Altsaxophon',
+        'Tenorsaxophon',
+        'Baritonsaxophon',
+        'Trompete',
+        'Flügelhorn',
+        'Waldhorn',
+        'Tenorhorn',
+        'Bariton',
+        'Posaune',
+        'Tuba',
+        'Schlagzeug',
+      ];
+    }
+
+    const standardOrder = [
+      'Partitur', 'Direktion',
+      'Piccoloflöte', 'Flöte', 'Oboe', 'Fagott',
+      'Es-Klarinette', 'Klarinette', 'Bassklarinette',
+      'Sopransaxophon', 'Altsaxophon', 'Tenorsaxophon', 'Baritonsaxophon',
+      'Trompete', 'Flügelhorn', 'Kornett',
+      'Waldhorn',
+      'Tenorhorn', 'Bariton', 'Euphonium',
+      'Posaune',
+      'Tuba', 'E-Bass', 'Kontrabass',
+      'Schlagzeug', 'Pauken', 'Percussion', 'Glockenspiel',
+      'Klavier', 'Gitarre', 'Gesang', 'Harfe',
+    ];
+
+    final sorted = discovered.toList()
+      ..sort((a, b) {
+        final idxA = standardOrder.indexOf(a);
+        final idxB = standardOrder.indexOf(b);
+        if (idxA != -1 && idxB != -1) return idxA.compareTo(idxB);
+        if (idxA != -1) return -1;
+        if (idxB != -1) return 1;
+        return a.compareTo(b);
+      });
+
+    return sorted;
   }
 }

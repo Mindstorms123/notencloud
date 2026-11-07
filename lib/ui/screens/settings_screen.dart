@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -99,6 +102,147 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _startBrowserLoginFlow() async {
+    final serverUrl = _serverUrlController.text.trim().isNotEmpty
+        ? _serverUrlController.text.trim()
+        : 'https://cloud.blasorchester-1862.de/';
+    _serverUrlController.text = serverUrl;
+
+    setState(() {
+      _isTestingConnection = true;
+      _connectionTestResult = 'Starte Nextcloud Browser-Login...';
+    });
+
+    final flow = await NextcloudService.initLoginFlow(serverUrl);
+    if (flow == null) {
+      setState(() {
+        _isTestingConnection = false;
+        _isConnectionSuccess = false;
+        _connectionTestResult = 'Login-Flow konnte nicht initialisiert werden. Bitte Server-URL prüfen.';
+      });
+      return;
+    }
+
+    final loginUri = Uri.parse(flow.loginUrl);
+    if (!await launchUrl(loginUri, mode: LaunchMode.externalApplication)) {
+      setState(() {
+        _isTestingConnection = false;
+        _isConnectionSuccess = false;
+        _connectionTestResult = 'Web-Browser konnte nicht automatisch geöffnet werden.';
+      });
+      return;
+    }
+
+    // Show waiting dialog while polling Nextcloud
+    bool isCancelled = false;
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) => AlertDialog(
+          backgroundColor: AppTheme.darkCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.open_in_browser_rounded, color: AppTheme.primaryLight),
+              SizedBox(width: 10),
+              Text('Im Browser anmelden', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: AppTheme.primaryLight),
+              SizedBox(height: 18),
+              Text(
+                'Dein Web-Browser wurde geöffnet.\n\nBitte melde dich wie gewohnt an und tippe auf "Zugriff gewähren".',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                isCancelled = true;
+                Navigator.pop(dialogCtx);
+              },
+              child: const Text('Abbrechen', style: TextStyle(color: AppTheme.darkTextMuted)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Poll Nextcloud every 1.5 seconds for up to 2.5 minutes
+    final startTime = DateTime.now();
+    while (!isCancelled && DateTime.now().difference(startTime).inSeconds < 150) {
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (isCancelled || !mounted) break;
+
+      final creds = await NextcloudService.pollLoginFlow(flow.pollEndpoint, flow.pollToken);
+      if (creds != null) {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context); // Close waiting dialog
+        }
+        setState(() {
+          _usernameController.text = creds.loginName;
+          _passwordController.text = creds.appPassword;
+          if (_rootFolderController.text.trim().isEmpty) {
+            _rootFolderController.text = '/Noten';
+          }
+        });
+        await _saveAccount();
+        await _testConnection();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.emerald,
+              content: Text('Erfolgreich als "${creds.loginName}" verbunden!'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+    setState(() {
+      _isTestingConnection = false;
+      _isConnectionSuccess = false;
+      _connectionTestResult = isCancelled
+          ? 'Anmeldung abgebrochen.'
+          : 'Zeitfenster für Bestätigung im Browser abgelaufen.';
+    });
+  }
+
+  void _shareConnectionInfo() {
+    final server = _serverUrlController.text.trim().isNotEmpty
+        ? _serverUrlController.text.trim()
+        : 'https://cloud.blasorchester-1862.de/';
+    final folder = _rootFolderController.text.trim().isNotEmpty
+        ? _rootFolderController.text.trim()
+        : '/Noten';
+
+    final text = '🎵 Blasorchester Notencloud Einrichtung:\n\n'
+        '1. Notencloud-App installieren\n'
+        '2. In den Einstellungen auf "Im Browser anmelden" tippen\n'
+        '3. Server-URL: $server\n'
+        '4. Notenordner: $folder\n'
+        '5. Auf "Zugriff gewähren" tippen – fertig!';
+
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        backgroundColor: AppTheme.emerald,
+        content: Text('Einrichtungs-Info kopiert! Kann per WhatsApp / Signal geteilt werden.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
   void _showGuidelineDialog() {
     showDialog(
       context: context,
@@ -175,6 +319,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cachedSongs = widget.storageService.getCachedSongs();
+    final dynamicInstruments = VoiceMatcher.getAvailableInstruments(cachedSongs);
+    final instrumentsList = [
+      ...dynamicInstruments,
+      if (!dynamicInstruments.contains(_profile.instrument)) _profile.instrument,
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -229,22 +379,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppTheme.emerald.withOpacity(0.12),
+                        color: AppTheme.emerald.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.person_rounded, color: AppTheme.emerald, size: 20),
                     ),
                     const SizedBox(width: 12),
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Dein Musiker-Profil',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          'Automatische Stimmen-Zuweisung',
-                          style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                          dynamicInstruments.isNotEmpty
+                              ? '${dynamicInstruments.length} Register aus Cloud erkannt'
+                              : 'Automatische Stimmen-Zuweisung',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
                         ),
                       ],
                     ),
@@ -252,16 +404,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 18),
 
-                // Instrument selector
+                // Dynamic Instrument selector
                 DropdownButtonFormField<String>(
-                  value: MusicianProfile.standardInstruments.contains(_profile.instrument)
+                  value: instrumentsList.contains(_profile.instrument)
                       ? _profile.instrument
-                      : 'Trompete',
-                  decoration: const InputDecoration(
-                    labelText: 'Instrument',
-                    prefixIcon: Icon(Icons.music_note_rounded),
+                      : instrumentsList.firstOrNull ?? 'Trompete',
+                  decoration: InputDecoration(
+                    labelText: 'Instrument (${instrumentsList.length} in Cloud)',
+                    prefixIcon: const Icon(Icons.music_note_rounded),
                   ),
-                  items: MusicianProfile.standardInstruments.map((inst) {
+                  items: instrumentsList.map((inst) {
                     return DropdownMenuItem(value: inst, child: Text(inst));
                   }).toList(),
                   onChanged: (val) {
@@ -350,7 +502,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppTheme.primary.withOpacity(0.12),
+                        color: AppTheme.primary.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.cloud_rounded, color: AppTheme.primaryLight, size: 20),
@@ -372,6 +524,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
                 const SizedBox(height: 18),
+
+                // 1-Click Browser Login Card
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.primary.withValues(alpha: 0.2),
+                        AppTheme.primaryLight.withValues(alpha: 0.08),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.35)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.auto_awesome_rounded, color: AppTheme.primaryLight, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Ein-Klick Nextcloud Browser-Login',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: AppTheme.primaryLight,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Öffnet deinen Browser für die Anmeldung. Einfach auf "Zugriff gewähren" tippen – kein Passwort-Abtippen nötig!',
+                        style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(vertical: 11),
+                              ),
+                              onPressed: _isTestingConnection ? null : _startBrowserLoginFlow,
+                              icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                              label: const Text('Im Browser anmelden', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            style: IconButton.styleFrom(
+                              backgroundColor: AppTheme.darkSurface,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: const BorderSide(color: AppTheme.darkBorder),
+                              ),
+                            ),
+                            icon: const Icon(Icons.share_rounded, size: 18, color: AppTheme.primaryLight),
+                            tooltip: 'Einrichtung für Kollegen teilen',
+                            onPressed: _shareConnectionInfo,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Row(
+                  children: [
+                    Expanded(child: Divider(color: AppTheme.darkBorder)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('oder manuell eingeben', style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted)),
+                    ),
+                    Expanded(child: Divider(color: AppTheme.darkBorder)),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
                 TextField(
                   controller: _serverUrlController,
@@ -422,12 +660,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     margin: const EdgeInsets.only(bottom: 14),
                     decoration: BoxDecoration(
                       color: _isConnectionSuccess
-                          ? AppTheme.emerald.withOpacity(0.12)
-                          : AppTheme.rose.withOpacity(0.12),
+                          ? AppTheme.emerald.withValues(alpha: 0.12)
+                          : AppTheme.rose.withValues(alpha: 0.12),
                       border: Border.all(
                         color: _isConnectionSuccess
-                            ? AppTheme.emerald.withOpacity(0.3)
-                            : AppTheme.rose.withOpacity(0.3),
+                            ? AppTheme.emerald.withValues(alpha: 0.3)
+                            : AppTheme.rose.withValues(alpha: 0.3),
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),

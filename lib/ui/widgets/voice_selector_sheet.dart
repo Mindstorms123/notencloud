@@ -56,7 +56,9 @@ class VoiceSelectorSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Stimmenauswahl (${song.parts.length} Stimmen vorhanden)',
+                        song.isDocumentOrList
+                            ? 'Dokument / Liste (${song.parts.length} Dateien)'
+                            : 'Stimmenauswahl (${song.parts.length} Stimmen vorhanden)',
                         style: const TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
                       ),
                     ],
@@ -70,8 +72,8 @@ class VoiceSelectorSheet extends StatelessWidget {
             ),
           ),
 
-          // Explanatory banner if no exact match exists
-          if (!hasExactMatch)
+          // Explanatory banner if no exact match exists (not shown for general documents/lists)
+          if (!hasExactMatch && !song.isDocumentOrList)
             Container(
               margin: const EdgeInsets.fromLTRB(20, 12, 20, 4),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

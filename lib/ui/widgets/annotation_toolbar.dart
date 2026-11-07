@@ -114,6 +114,15 @@ class AnnotationToolbar extends StatelessWidget {
                       onTap: () => onSelectTool(StrokeType.highlighter),
                     ),
 
+                    // Text Tool
+                    _ToolButton(
+                      icon: Icons.text_fields_rounded,
+                      isSelected: activeTool == StrokeType.text,
+                      activeColor: AppTheme.primaryLight,
+                      tooltip: 'Text tippen',
+                      onTap: () => onSelectTool(StrokeType.text),
+                    ),
+
                     // Eraser Tool
                     _ToolButton(
                       icon: Icons.auto_fix_normal_rounded,

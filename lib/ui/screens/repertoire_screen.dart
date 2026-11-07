@@ -8,6 +8,7 @@ import '../../services/storage_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/voice_selector_sheet.dart';
+import '../widgets/instrument_filter_sheet.dart';
 import 'score_viewer_screen.dart';
 
 class RepertoireScreen extends StatefulWidget {
@@ -37,10 +38,12 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   String? _syncMessage;
   String _selectedCategory = 'Alle';
   bool _onlyMyVoice = false;
+  late MusicianProfile _activeProfile;
 
   @override
   void initState() {
     super.initState();
+    _activeProfile = widget.profile;
     _loadLocalSongs();
     _searchController.addListener(_onSearchChanged);
     // Silent background delta-sync on launch if Nextcloud is configured
@@ -58,7 +61,12 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   }
 
   void _loadLocalSongs() {
-    final cached = widget.storageService.getCachedSongs();
+    final cached = widget.storageService.getCachedSongs().where((s) {
+      if (s.id == '01_Aktuelle Noten_01_Aktuelle Noten' || s.id == '02_Ältere Noten_02_Ältere Noten') return false;
+      if (s.folderName == '01_Aktuelle Noten' || s.folderName == '02_Ältere Noten') return false;
+      if ((s.title.toLowerCase() == 'aktuelle noten' || s.title.toLowerCase() == 'ältere noten') && s.parts.length > 50) return false;
+      return true;
+    }).toList();
     setState(() {
       _allSongs = cached;
       _onSearchChanged();
@@ -79,7 +87,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         if (!matchesCat) return false;
 
         if (_onlyMyVoice) {
-          final best = VoiceMatcher.findBestMatch(song.parts, widget.profile);
+          final best = VoiceMatcher.findBestMatchForSong(song, _activeProfile);
           if (best == null) return false;
         }
 
@@ -89,6 +97,38 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             song.composer.toLowerCase().contains(query);
       }).toList();
     });
+  }
+
+  void _showInstrumentFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => InstrumentFilterSheet(
+        currentProfile: _activeProfile,
+        allSongs: _allSongs,
+        onlyMyVoice: _onlyMyVoice,
+        onApply: (updatedProfile, onlyMyVoice, savePermanently) async {
+          setState(() {
+            _activeProfile = updatedProfile;
+            _onlyMyVoice = onlyMyVoice;
+            _onSearchChanged();
+          });
+          if (savePermanently) {
+            await widget.storageService.saveProfile(updatedProfile);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: AppTheme.emerald,
+                  content: Text('Standard-Profil gespeichert: ${updatedProfile.displayName}'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _syncWithCloud({bool isBackground = false}) async {
@@ -222,7 +262,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     );
 
     for (final song in _allSongs) {
-      final bestMatch = VoiceMatcher.findBestMatch(song.parts, widget.profile);
+      final bestMatch = VoiceMatcher.findBestMatchForSong(song, widget.profile);
       if (bestMatch != null) {
         try {
           final localPath = await widget.storageService.getLocalPdfPath(
@@ -256,7 +296,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
       return;
     }
 
-    final bestMatch = VoiceMatcher.findBestMatch(song.parts, widget.profile);
+    final bestMatch = VoiceMatcher.findBestMatchForSong(song, _activeProfile);
     if (bestMatch == null) {
       showModalBottomSheet(
         context: context,
@@ -267,7 +307,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         builder: (ctx) => VoiceSelectorSheet(
           song: song,
           currentPart: song.parts.first,
-          profile: widget.profile,
+          profile: _activeProfile,
           onSelectPart: (part) {
             Navigator.push(
               context,
@@ -275,7 +315,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                 builder: (ctx) => ScoreViewerScreen(
                   song: song,
                   initialPart: part,
-                  profile: widget.profile,
+                  profile: _activeProfile,
                   storageService: widget.storageService,
                   annotationService: widget.annotationService,
                   nextcloudService: widget.nextcloudService,
@@ -294,7 +334,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         builder: (ctx) => ScoreViewerScreen(
           song: song,
           initialPart: bestMatch,
-          profile: widget.profile,
+          profile: _activeProfile,
           storageService: widget.storageService,
           annotationService: widget.annotationService,
           nextcloudService: widget.nextcloudService,
@@ -411,30 +451,56 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.emerald,
-                    shape: BoxShape.circle,
+                Expanded(
+                  child: InkWell(
+                    onTap: _showInstrumentFilterSheet,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryLight.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.emerald,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Deine Stimme: ',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
+                            ),
+                          ),
+                          Flexible(
+                            child: Text(
+                              _activeProfile.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: AppTheme.primaryLight,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_drop_down_rounded, size: 18, color: AppTheme.primaryLight),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  'Deine Stimme: ',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
-                  ),
-                ),
-                Text(
-                  widget.profile.displayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const Spacer(),
                 Text(
                   '${_filteredSongs.length} ${_filteredSongs.length == 1 ? "Stück" : "Stücke"}',
                   style: TextStyle(
@@ -576,9 +642,10 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                       itemBuilder: (context, index) {
                         final song = _filteredSongs[index];
                         final match =
-                            VoiceMatcher.findDetailedMatch(song.parts, widget.profile);
+                            VoiceMatcher.findDetailedMatchForSong(song, _activeProfile);
                         final bestMatch = match?.part;
                         final isFallback = match?.isFallback ?? false;
+                        final isDoc = song.isDocumentOrList;
 
                         return Material(
                           color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
@@ -601,25 +668,31 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                     width: 44,
                                     height: 44,
                                     decoration: BoxDecoration(
-                                      color: bestMatch != null
-                                          ? (isFallback
-                                              ? AppTheme.amber.withValues(alpha: 0.15)
-                                              : AppTheme.emerald.withValues(alpha: 0.12))
-                                          : (isDark
-                                              ? AppTheme.darkSurface
-                                              : Colors.grey.shade100),
+                                      color: isDoc
+                                          ? AppTheme.primaryLight.withValues(alpha: 0.15)
+                                          : (bestMatch != null
+                                              ? (isFallback
+                                                  ? AppTheme.amber.withValues(alpha: 0.15)
+                                                  : AppTheme.emerald.withValues(alpha: 0.12))
+                                              : (isDark
+                                                  ? AppTheme.darkSurface
+                                                  : Colors.grey.shade100)),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Center(
                                       child: Icon(
-                                        bestMatch != null
-                                            ? Icons.music_note_rounded
-                                            : Icons.library_music_rounded,
-                                        color: bestMatch != null
-                                            ? (isFallback ? AppTheme.amber : AppTheme.emerald)
-                                            : (isDark
-                                                ? AppTheme.darkTextMuted
-                                                : Colors.grey.shade500),
+                                        isDoc
+                                            ? Icons.description_rounded
+                                            : (bestMatch != null
+                                                ? Icons.music_note_rounded
+                                                : Icons.library_music_rounded),
+                                        color: isDoc
+                                            ? AppTheme.primaryLight
+                                            : (bestMatch != null
+                                                ? (isFallback ? AppTheme.amber : AppTheme.emerald)
+                                                : (isDark
+                                                    ? AppTheme.darkTextMuted
+                                                    : Colors.grey.shade500)),
                                         size: 22,
                                       ),
                                     ),
@@ -645,8 +718,39 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                           runSpacing: 4,
                                           crossAxisAlignment: WrapCrossAlignment.center,
                                           children: [
-                                            // Matching Voice Badge
-                                            if (bestMatch != null)
+                                            // Matching Voice Badge (or Document Badge for Listen und Co)
+                                            if (isDoc)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.primaryLight.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: AppTheme.primaryLight.withValues(alpha: 0.35),
+                                                  ),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.description_outlined,
+                                                      size: 12,
+                                                      color: AppTheme.primaryLight,
+                                                    ),
+                                                    SizedBox(width: 4),
+                                                    Text(
+                                                      'Dokument / Liste (alle Stimmen)',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: AppTheme.primaryLight,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            else if (bestMatch != null)
                                               Container(
                                                 padding: const EdgeInsets.symmetric(
                                                     horizontal: 8, vertical: 3),
@@ -677,7 +781,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                                     Flexible(
                                                       child: Text(
                                                         isFallback
-                                                            ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
+                                                            ? 'Keine ${_activeProfile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
                                                             : bestMatch.fileName,
                                                         maxLines: 1,
                                                         overflow: TextOverflow.ellipsis,
@@ -704,7 +808,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
-                                                  'Keine ${widget.profile.instrument}',
+                                                  'Keine ${_activeProfile.instrument}',
                                                   style: TextStyle(
                                                     fontSize: 10,
                                                     color: isDark
@@ -720,7 +824,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                                 padding: const EdgeInsets.symmetric(
                                                     horizontal: 6, vertical: 3),
                                                 decoration: BoxDecoration(
-                                                  color: AppTheme.primary.withOpacity(0.1),
+                                                  color: AppTheme.primary.withValues(alpha: 0.1),
                                                   borderRadius: BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
