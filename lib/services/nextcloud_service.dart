@@ -659,6 +659,59 @@ class NextcloudService {
     return false;
   }
 
+  /// Fetch shared club configuration (Konzertmeister URL, default settings) from Nextcloud
+  Future<Map<String, dynamic>?> fetchClubConfig() async {
+    for (final path in _candidateSetlistPaths) {
+      for (final fileName in ['club_config.json', 'konzertmeister_config.json']) {
+        final filePath = '$path/$fileName';
+        final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+        try {
+          final res = await _client.get(url, headers: _headers);
+          if (res.statusCode == 200) {
+            final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+            if (decoded is Map<String, dynamic>) {
+              return decoded;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  /// Upload shared club configuration to Nextcloud so all members receive it
+  Future<bool> uploadClubConfig(Map<String, dynamic> config) async {
+    final payload = {
+      ...config,
+      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedBy': account.username,
+    };
+    final content = jsonEncode(payload);
+
+    for (final path in _candidateSetlistPaths) {
+      final ok = await ensureDirectoryExists(path);
+      if (!ok) continue;
+
+      final filePath = '$path/club_config.json';
+      final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+
+      try {
+        final res = await _client.put(
+          url,
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          body: utf8.encode(content),
+        );
+        if (res.statusCode == 201 || res.statusCode == 204 || res.statusCode == 200) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
   /// Ensures that all directory levels exist on Nextcloud, creating missing ones via MKCOL
   Future<bool> ensureDirectoryExists(String relativePath) async {
     final clean = relativePath.trim().replaceAll(RegExp(r'^/+|/+$'), '');

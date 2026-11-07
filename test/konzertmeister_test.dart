@@ -295,5 +295,63 @@ void main() {
       final fetched = await ncService.fetchKonzertmeisterAssignments();
       expect(fetched['SHAP_123'], 'setlist_abc');
     });
+
+    test('NextcloudService uploads and fetches club_config.json, applied via StorageService', () async {
+      String? uploadedConfigJson;
+
+      final mockClient = MockClient((request) async {
+        if (request.method == 'PUT' && request.url.path.contains('club_config.json')) {
+          uploadedConfigJson = request.body;
+          return http.Response('', 201);
+        } else if (request.method == 'GET' && request.url.path.contains('club_config.json')) {
+          if (uploadedConfigJson != null) {
+            return http.Response(uploadedConfigJson!, 200);
+          }
+          return http.Response('', 404);
+        } else if (request.method == 'PROPFIND') {
+          return http.Response('', 200);
+        }
+        return http.Response('', 200);
+      });
+
+      const account = NextcloudAccount(
+        serverUrl: 'https://cloud.blasorchester-1862.de',
+        username: 'notenwart',
+        password: 'pw',
+        rootFolder: '/Noten',
+      );
+
+      final ncService = NextcloudService(account, mockClient);
+
+      // Before upload, no config found
+      final initialConfig = await ncService.fetchClubConfig();
+      expect(initialConfig, isNull);
+
+      // Upload club config
+      const customUrl = 'https://rest.konzertmeister.app/api/v3/org/TEST_ORG/upcomingappointments';
+      final ok = await ncService.uploadClubConfig({
+        'version': 1,
+        'konzertmeister': {
+          'enabled': true,
+          'widgetUrl': customUrl,
+        },
+        'defaultCategory': 'Konzertnoten',
+      });
+      expect(ok, isTrue);
+
+      // Fetch config
+      final fetched = await ncService.fetchClubConfig();
+      expect(fetched, isNotNull);
+      expect(fetched!['konzertmeister']['widgetUrl'], customUrl);
+
+      // Apply to StorageService
+      SharedPreferences.setMockInitialValues({});
+      final storage = await StorageService.init();
+      await storage.applyClubConfig(fetched);
+
+      expect(storage.isKonzertmeisterEnabled(), isTrue);
+      expect(storage.getKonzertmeisterUrl(), customUrl);
+      expect(storage.getDefaultCategory(), 'Konzertnoten');
+    });
   });
 }

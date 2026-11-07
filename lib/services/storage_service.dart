@@ -471,4 +471,23 @@ class StorageService {
     }
     await _prefs.setString(_prefKonzertmeisterAssignmentsKey, jsonEncode(map));
   }
+
+  /// Applies shared club configuration downloaded from Nextcloud
+  Future<void> applyClubConfig(Map<String, dynamic> config) async {
+    if (config['konzertmeister'] is Map<String, dynamic>) {
+      final km = config['konzertmeister'] as Map<String, dynamic>;
+      if (km['enabled'] is bool) {
+        await setKonzertmeisterEnabled(km['enabled'] as bool);
+      }
+      if (km['widgetUrl'] is String && (km['widgetUrl'] as String).isNotEmpty) {
+        await setKonzertmeisterUrl(km['widgetUrl'] as String);
+      }
+    } else if (config['konzertmeisterWidgetUrl'] is String) {
+      await setKonzertmeisterUrl(config['konzertmeisterWidgetUrl'] as String);
+      await setKonzertmeisterEnabled(true);
+    }
+    if (config['defaultCategory'] is String && (config['defaultCategory'] as String).isNotEmpty) {
+      await setDefaultCategory(config['defaultCategory'] as String);
+    }
+  }
 }

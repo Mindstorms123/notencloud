@@ -1439,13 +1439,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     },
                                   ),
                                   const SizedBox(height: 8),
-                                  TextButton(
-                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                                    onPressed: () {
-                                      _kmUrlController.text = KonzertmeisterService.defaultUrl;
-                                      widget.storageService.setKonzertmeisterUrl(KonzertmeisterService.defaultUrl);
-                                    },
-                                    child: const Text('Auf Standard-Vereinslink zurücksetzen', style: TextStyle(fontSize: 12, color: Color(0xFF0284C7))),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      TextButton(
+                                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                                        onPressed: () {
+                                          _kmUrlController.text = KonzertmeisterService.defaultUrl;
+                                          widget.storageService.setKonzertmeisterUrl(KonzertmeisterService.defaultUrl);
+                                        },
+                                        child: const Text('Auf Standard zurücksetzen', style: TextStyle(fontSize: 12, color: Color(0xFF0284C7))),
+                                      ),
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF0284C7),
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        ),
+                                        onPressed: () async {
+                                          final messenger = ScaffoldMessenger.of(context);
+                                          final url = _kmUrlController.text.trim().isNotEmpty
+                                              ? _kmUrlController.text.trim()
+                                              : KonzertmeisterService.defaultUrl;
+                                          final config = {
+                                            'version': 1,
+                                            'konzertmeister': {
+                                              'enabled': _isKmEnabled,
+                                              'widgetUrl': url,
+                                            },
+                                            'defaultCategory': _defaultCategory,
+                                          };
+                                          final ncService = NextcloudService(_account);
+                                          final ok = await ncService.uploadClubConfig(config);
+                                          if (ok) {
+                                            messenger.showSnackBar(
+                                              const SnackBar(
+                                                backgroundColor: Color(0xFF0284C7),
+                                                content: Text('Konzertmeister-Einstellung in Nextcloud für alle Mitglieder gespeichert!'),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        icon: const Icon(Icons.cloud_upload_rounded, size: 14),
+                                        label: const Text('Für Verein speichern', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/nextcloud_account.dart';
+import '../../services/konzertmeister_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -263,7 +264,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         await widget.storageService.saveAccount(account);
-        unawaited(NextcloudService(account).ensureSetlistFolderExists());
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -272,13 +272,7 @@ class _LoginScreenState extends State<LoginScreen> {
               content: Text('Erfolgreich als "${creds.loginName}" angemeldet!'),
             ),
           );
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => MainNavigationScreen(storageService: widget.storageService),
-            ),
-          );
+          await _handlePostLogin(account);
         }
         return;
       }
@@ -329,8 +323,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final isConnected = await service.testConnection();
 
     if (isConnected) {
-      await widget.storageService.saveAccount(account.copyWith(isValidated: true));
-      unawaited(service.ensureSetlistFolderExists());
+      final validatedAccount = account.copyWith(isValidated: true);
+      await widget.storageService.saveAccount(validatedAccount);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -338,12 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
             content: Text('Erfolgreich als "$username" angemeldet!'),
           ),
         );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MainNavigationScreen(storageService: widget.storageService),
-          ),
-        );
+        await _handlePostLogin(validatedAccount);
       }
     } else {
       setState(() {
@@ -351,6 +340,242 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = 'Verbindung fehlgeschlagen. Bitte Zugangsdaten und Server-Adresse prüfen.';
       });
     }
+  }
+
+  Future<void> _handlePostLogin(NextcloudAccount account) async {
+    final service = NextcloudService(account);
+    unawaited(service.ensureSetlistFolderExists());
+
+    // Check if club configuration already exists in Nextcloud
+    final clubConfig = await service.fetchClubConfig();
+
+    if (clubConfig != null) {
+      // Configuration found on Nextcloud! Apply it automatically
+      await widget.storageService.applyClubConfig(clubConfig);
+      final kmService = KonzertmeisterService(storageService: widget.storageService);
+      unawaited(kmService.fetchAppointments(forceRefresh: true));
+
+      if (mounted) {
+        _navigateToMain();
+      }
+    } else {
+      // No configuration found on Nextcloud! Offer initial club setup
+      if (mounted) {
+        await _showInitialClubSetupModal(service);
+      }
+    }
+  }
+
+  Future<void> _showInitialClubSetupModal(NextcloudService ncService) async {
+    final kmUrlController = TextEditingController(text: widget.storageService.getKonzertmeisterUrl());
+    bool isEnabled = true;
+    bool isSaving = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.darkSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0284C7), Color(0xFF2BA9E0)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.event_available_rounded, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Vereinskalender einrichten',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                        Text(
+                          'Konzertmeister Auftritte & Setlisten',
+                          style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkCard,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.darkBorder),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: Color(0xFF2BA9E0), size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'In eurer Nextcloud wurde noch keine Konzertmeister-Verbindung gefunden.\n\n'
+                        'Möchtest du Konzertmeister für das gesamte Orchester aktivieren? '
+                        'Wenn du es hier speicherst, haben alle anderen Mitglieder die Auftritte und Setlisten automatisch verfügbar!',
+                        style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Konzertmeister für den Verein aktivieren', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: const Text('Auftritte automatisch laden und Setlisten zuweisen', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
+                value: isEnabled,
+                activeThumbColor: const Color(0xFF0284C7),
+                onChanged: (val) {
+                  setSheetState(() => isEnabled = val);
+                },
+              ),
+              if (isEnabled) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: kmUrlController,
+                  style: const TextStyle(fontSize: 12),
+                  decoration: InputDecoration(
+                    labelText: 'Konzertmeister Widget URL',
+                    hintText: 'https://rest.konzertmeister.app/...',
+                    helperText: 'Standard: Blasorchester Georgsmarienhütte e. V.',
+                    helperStyle: const TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      tooltip: 'Standard-URL wiederherstellen',
+                      onPressed: () {
+                        kmUrlController.text = KonzertmeisterService.defaultUrl;
+                      },
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.darkTextMuted,
+                        side: const BorderSide(color: AppTheme.darkBorder),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: isSaving ? null : () {
+                        Navigator.pop(ctx);
+                        _navigateToMain();
+                      },
+                      child: const Text('Überspringen'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0284C7),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              setSheetState(() => isSaving = true);
+                              final url = kmUrlController.text.trim().isNotEmpty
+                                  ? kmUrlController.text.trim()
+                                  : KonzertmeisterService.defaultUrl;
+
+                              final config = {
+                                'version': 1,
+                                'konzertmeister': {
+                                  'enabled': isEnabled,
+                                  'widgetUrl': url,
+                                },
+                                'defaultCategory': 'Aktuelle Noten',
+                              };
+
+                              await ncService.uploadClubConfig(config);
+                              await widget.storageService.applyClubConfig(config);
+
+                              if (isEnabled) {
+                                final kmService = KonzertmeisterService(storageService: widget.storageService);
+                                unawaited(kmService.fetchAppointments(forceRefresh: true));
+                              }
+
+                              if (ctx.mounted) {
+                                Navigator.pop(ctx);
+                              }
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    backgroundColor: Color(0xFF0284C7),
+                                    content: Text('Konzertmeister erfolgreich für das gesamte Orchester eingerichtet!'),
+                                  ),
+                                );
+                                _navigateToMain();
+                              }
+                            },
+                      icon: isSaving
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.cloud_upload_rounded, size: 18),
+                      label: const Text('In Nextcloud speichern', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigateToMain() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MainNavigationScreen(storageService: widget.storageService),
+      ),
+    );
   }
 
   void _skipToOfflineMode() {
