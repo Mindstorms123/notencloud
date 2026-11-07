@@ -100,6 +100,7 @@ class Song {
   final String tempo;
   final String notes;
   final DateTime? lastSynced;
+  final String etag; // Nextcloud WebDAV ETag for fast delta sync
 
   const Song({
     required this.id,
@@ -113,6 +114,7 @@ class Song {
     this.tempo = '',
     this.notes = '',
     this.lastSynced,
+    this.etag = '',
   });
 
   /// User-friendly title cleaned up from folder prefix numbers (e.g. "001_Alte_Kameraden" -> "Alte Kameraden")
@@ -126,7 +128,10 @@ class Song {
   }
 
   Song copyWith({
+    String? id,
     String? title,
+    String? folderName,
+    String? remoteFolderPath,
     String? category,
     List<PartFile>? parts,
     String? composer,
@@ -134,12 +139,13 @@ class Song {
     String? tempo,
     String? notes,
     DateTime? lastSynced,
+    String? etag,
   }) {
     return Song(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
-      folderName: folderName,
-      remoteFolderPath: remoteFolderPath,
+      folderName: folderName ?? this.folderName,
+      remoteFolderPath: remoteFolderPath ?? this.remoteFolderPath,
       category: category ?? this.category,
       parts: parts ?? this.parts,
       composer: composer ?? this.composer,
@@ -147,6 +153,7 @@ class Song {
       tempo: tempo ?? this.tempo,
       notes: notes ?? this.notes,
       lastSynced: lastSynced ?? this.lastSynced,
+      etag: etag ?? this.etag,
     );
   }
 
@@ -162,6 +169,7 @@ class Song {
         'tempo': tempo,
         'notes': notes,
         'lastSynced': lastSynced?.toIso8601String(),
+        'etag': etag,
       };
 
   factory Song.fromJson(Map<String, dynamic> json) => Song(
@@ -181,5 +189,6 @@ class Song {
         lastSynced: json['lastSynced'] != null
             ? DateTime.tryParse(json['lastSynced'] as String)
             : null,
+        etag: json['etag'] as String? ?? '',
       );
 }

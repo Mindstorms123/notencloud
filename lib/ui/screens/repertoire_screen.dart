@@ -33,6 +33,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   List<Song> _filteredSongs = [];
   final TextEditingController _searchController = TextEditingController();
   bool _isSyncing = false;
+  bool _isBackgroundSyncing = false;
   String? _syncMessage;
   String _selectedCategory = 'Alle';
   bool _onlyMyVoice = false;
@@ -42,6 +43,12 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     super.initState();
     _loadLocalSongs();
     _searchController.addListener(_onSearchChanged);
+    // Silent background delta-sync on launch if Nextcloud is configured
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.nextcloudService != null) {
+        _syncWithCloud(isBackground: true);
+      }
+    });
   }
 
   @override
@@ -84,58 +91,89 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     });
   }
 
-  Future<void> _syncWithCloud() async {
+  Future<void> _syncWithCloud({bool isBackground = false}) async {
     if (widget.nextcloudService == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keine Nextcloud-Verbindung konfiguriert.')),
-      );
+      if (!isBackground && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Keine Nextcloud-Verbindung konfiguriert.')),
+        );
+      }
       return;
     }
 
-    setState(() {
-      _isSyncing = true;
-      _syncMessage = 'Scanne Notenarchiv...';
-    });
+    if (isBackground) {
+      setState(() {
+        _isBackgroundSyncing = true;
+      });
+    } else {
+      setState(() {
+        _isSyncing = true;
+        _syncMessage = 'Prüfe auf Änderungen...';
+      });
+    }
 
     try {
+      final initialCount = _allSongs.length;
       final remoteSongs = await widget.nextcloudService!.scanLibrary(
+        existingCachedSongs: _allSongs,
         onProgress: (current, total) {
-          if (mounted) {
+          if (mounted && !isBackground) {
             setState(() {
-              _syncMessage = 'Lade Stücke: $current / $total...';
+              _syncMessage = 'Aktualisiere geänderte Stücke: $current / $total...';
             });
           }
         },
       );
       await widget.storageService.saveCachedSongs(remoteSongs);
 
-      setState(() {
-        _allSongs = remoteSongs;
-        _onSearchChanged();
-        _isSyncing = false;
-        _syncMessage = null;
-      });
+      final diffCount = remoteSongs.length - initialCount;
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.emerald,
-            content: Text('${remoteSongs.length} Stücke erfolgreich synchronisiert!'),
-          ),
-        );
+        setState(() {
+          _allSongs = remoteSongs;
+          _onSearchChanged();
+          _isSyncing = false;
+          _isBackgroundSyncing = false;
+          _syncMessage = null;
+        });
+
+        if (!isBackground) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.emerald,
+              content: Text(
+                diffCount > 0
+                    ? '$diffCount neues Stück / neue Stücke synchronisiert (${remoteSongs.length} gesamt)!'
+                    : 'Bibliothek ist aktuell (${remoteSongs.length} Stücke geprüft)',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else if (diffCount != 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.primary,
+              content: Text('Notenarchiv im Hintergrund aktualisiert: ${remoteSongs.length} Stücke'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
     } catch (e) {
-      setState(() {
-        _isSyncing = false;
-        _syncMessage = null;
-      });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.rose,
-            content: Text('Synchronisationsfehler: $e'),
-          ),
-        );
+        setState(() {
+          _isSyncing = false;
+          _isBackgroundSyncing = false;
+          _syncMessage = null;
+        });
+        if (!isBackground) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: AppTheme.rose,
+              content: Text('Synchronisationsfehler: $e'),
+            ),
+          );
+        }
       }
     }
   }
@@ -299,7 +337,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             onPressed: _downloadAllForOffline,
           ),
           IconButton(
-            icon: _isSyncing
+            icon: (_isSyncing || _isBackgroundSyncing)
                 ? const SizedBox(
                     width: 20,
                     height: 20,
@@ -307,7 +345,9 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                   )
                 : const Icon(Icons.sync_rounded),
             tooltip: 'Mit Nextcloud synchronisieren',
-            onPressed: _isSyncing ? null : _syncWithCloud,
+            onPressed: (_isSyncing || _isBackgroundSyncing)
+                ? null
+                : () => _syncWithCloud(isBackground: false),
           ),
           const SizedBox(width: 4),
         ],
@@ -407,15 +447,15 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             ),
           ),
 
-          // Live Sync Progress Bar
-          if (_isSyncing)
+          // Live Sync Progress Bar (only shown during active user sync)
+          if (_isSyncing && !_isBackgroundSyncing)
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppTheme.amber.withOpacity(0.12),
+                color: AppTheme.amber.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.amber.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -528,7 +568,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                   )
                 : RefreshIndicator(
                     color: AppTheme.primary,
-                    onRefresh: _syncWithCloud,
+                    onRefresh: () => _syncWithCloud(isBackground: false),
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       itemCount: _filteredSongs.length,

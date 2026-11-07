@@ -103,26 +103,47 @@ class NextcloudService {
         size = int.tryParse(lengthEl.innerText) ?? 0;
       }
 
+      String etag = '';
+      final etagEl = res.findAllElements('d:getetag').isNotEmpty
+          ? res.findAllElements('d:getetag').first
+          : res.findAllElements('D:getetag').firstOrNull;
+      if (etagEl != null) {
+        etag = etagEl.innerText.replaceAll('"', '').trim();
+      }
+
       items.add(_DavItem(
         href: href,
         name: name,
         isCollection: isCollection,
         size: size,
+        etag: etag,
       ));
     }
 
     return items;
   }
 
-  /// Scan the root sheet music folder and retrieve all songs with their parts,
-  /// traversing both category folders (e.g. "01_Aktuelle Noten") and instrument subfolders.
-  Future<List<Song>> scanLibrary({Function(int current, int total)? onProgress}) async {
+  /// Scan the root sheet music folder with fast incremental delta-sync.
+  /// If [existingCachedSongs] are provided, any song whose ETag has not changed
+  /// on Nextcloud will be reused instantly without triggering a WebDAV Depth: infinity scan!
+  Future<List<Song>> scanLibrary({
+    List<Song>? existingCachedSongs,
+    Function(int current, int total)? onProgress,
+  }) async {
     final rootFolder = account.cleanRootFolder;
     final rootItems = await _listFolder(rootFolder);
     final List<Song> songs = [];
 
-    // Collect all song folders to scan across categories
-    final List<({String songId, String title, String folderName, String href, String category})>
+    // Map existing cached songs by ID and folderName for instant lookup
+    final Map<String, Song> cachedMap = {
+      for (final s in (existingCachedSongs ?? [])) s.id: s,
+    };
+    final Map<String, Song> cachedByFolderMap = {
+      for (final s in (existingCachedSongs ?? [])) s.folderName: s,
+    };
+
+    // Collect song folders that are either new or have changed ETags
+    final List<({String songId, String title, String folderName, String href, String category, String etag})>
         songDirsToScan = [];
 
     for (final item in rootItems) {
@@ -143,13 +164,35 @@ class NextcloudService {
           final songId = '${item.name}_${songDir.name}';
           final songTitle = Song.cleanTitleFromFolder(songDir.name);
 
-          songDirsToScan.add((
-            songId: songId,
-            title: songTitle,
-            folderName: songDir.name,
-            href: songDir.href,
-            category: categoryName,
-          ));
+          // Fast Delta Cache check:
+          final cached = cachedMap[songId] ?? cachedByFolderMap[songDir.name];
+          final isCacheValid = cached != null &&
+              cached.parts.isNotEmpty &&
+              cached.etag.isNotEmpty &&
+              songDir.etag.isNotEmpty &&
+              cached.etag == songDir.etag;
+
+          if (isCacheValid) {
+            // Unchanged: reuse parsed parts instantly without any network call!
+            songs.add(cached.copyWith(
+              id: songId,
+              title: songTitle,
+              category: categoryName,
+              remoteFolderPath: songDir.href,
+              etag: songDir.etag,
+              lastSynced: DateTime.now(),
+            ));
+          } else {
+            // New or modified: queue for deep scan
+            songDirsToScan.add((
+              songId: songId,
+              title: songTitle,
+              folderName: songDir.name,
+              href: songDir.href,
+              category: categoryName,
+              etag: songDir.etag,
+            ));
+          }
         }
 
         // Loose PDFs directly in folder (e.g. "03_Unsortiert")
@@ -168,6 +211,7 @@ class NextcloudService {
               category: categoryName,
               parts: parts,
               lastSynced: DateTime.now(),
+              etag: item.etag,
             ));
           } else {
             for (final pdf in pdfs) {
@@ -183,6 +227,7 @@ class NextcloudService {
                 category: categoryName,
                 parts: [part],
                 lastSynced: DateTime.now(),
+                etag: pdf.etag,
               ));
             }
           }
@@ -190,34 +235,37 @@ class NextcloudService {
       }
     }
 
-    // Now scan all song folders with Depth: infinity in concurrent batches of 8
-    final total = songDirsToScan.length;
-    int processed = 0;
-    const batchSize = 8;
+    // Now scan only the new/modified song folders
+    final totalToScan = songDirsToScan.length;
+    if (totalToScan > 0) {
+      int processed = 0;
+      const batchSize = 8;
 
-    for (int i = 0; i < songDirsToScan.length; i += batchSize) {
-      final end = (i + batchSize < songDirsToScan.length) ? i + batchSize : songDirsToScan.length;
-      final batch = songDirsToScan.sublist(i, end);
+      for (int i = 0; i < songDirsToScan.length; i += batchSize) {
+        final end = (i + batchSize < songDirsToScan.length) ? i + batchSize : songDirsToScan.length;
+        final batch = songDirsToScan.sublist(i, end);
 
-      final batchResults = await Future.wait(
-        batch.map((s) async {
-          final parts = await _scanSongFolder(s.href, s.songId);
-          return Song(
-            id: s.songId,
-            title: s.title,
-            folderName: s.folderName,
-            remoteFolderPath: s.href,
-            category: s.category,
-            parts: parts,
-            lastSynced: DateTime.now(),
-          );
-        }),
-      );
+        final batchResults = await Future.wait(
+          batch.map((s) async {
+            final parts = await _scanSongFolder(s.href, s.songId);
+            return Song(
+              id: s.songId,
+              title: s.title,
+              folderName: s.folderName,
+              remoteFolderPath: s.href,
+              category: s.category,
+              parts: parts,
+              lastSynced: DateTime.now(),
+              etag: s.etag,
+            );
+          }),
+        );
 
-      songs.addAll(batchResults.where((s) => s.parts.isNotEmpty));
-      processed += batch.length;
-      if (onProgress != null) {
-        onProgress(processed, total);
+        songs.addAll(batchResults.where((s) => s.parts.isNotEmpty));
+        processed += batch.length;
+        if (onProgress != null) {
+          onProgress(processed, totalToScan);
+        }
       }
     }
 
@@ -361,53 +409,46 @@ class NextcloudService {
         final getRes = await _client.get(getUrl, headers: _headers);
         if (getRes.statusCode == 200) {
           final jsonMap = jsonDecode(getRes.body) as Map<String, dynamic>;
-          final fileName = href.split('/').last;
-          setlists.add(Setlist.fromJson(jsonMap).copyWith(
-            remoteFileName: fileName,
-            isSyncedWithCloud: true,
-          ));
+          setlists.add(Setlist.fromJson(jsonMap).copyWith(isSyncedWithCloud: true));
         }
       } catch (_) {
         // Skip malformed files
       }
     }
 
-    setlists.sort((a, b) => b.date.compareTo(a.date));
     return setlists;
   }
 
-  /// Check if the user has write permissions to create/edit setlists in `_Setlisten/`
+  /// Check write permission for the setlists folder
   Future<bool> hasSetlistWritePermission() async {
-    try {
-      final setlistFolder = '${account.cleanRootFolder}/_Setlisten';
-      // First ensure the folder exists (MKCOL)
-      final mkcolUrl = Uri.parse('${account.webDavBaseUrl}$setlistFolder');
-      await _client.send(
-        http.Request('MKCOL', mkcolUrl)..headers.addAll(_headers),
-      );
+    final setlistPath = '${account.cleanRootFolder}/_Setlisten';
+    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
 
-      // Test write permission with an empty temp check file
-      final testFileUrl = Uri.parse('${account.webDavBaseUrl}$setlistFolder/.perm_check');
-      final putRes = await _client.put(testFileUrl, headers: _headers, body: 'ok');
-      if (putRes.statusCode == 201 || putRes.statusCode == 204) {
-        // Delete test file
-        await _client.delete(testFileUrl, headers: _headers);
-        return true;
-      }
-      return false;
-    } catch (_) {
-      return false;
+    // Ensure folder exists or can be created
+    final req = http.Request('PROPFIND', url)
+      ..headers.addAll(_headers)
+      ..headers['Depth'] = '0';
+
+    final res = await _client.send(req);
+    if (res.statusCode == 404) {
+      // Try creating it
+      final mkcolReq = http.Request('MKCOL', url)..headers.addAll(_headers);
+      final mkcolRes = await _client.send(mkcolReq);
+      return mkcolRes.statusCode == 201;
     }
+
+    return res.statusCode == 200 || res.statusCode == 207;
   }
 
-  /// Upload or update a setlist on Nextcloud
+  /// Upload a setlist JSON file to Nextcloud `_Setlisten/<id>.json`
   Future<bool> uploadSetlist(Setlist setlist) async {
-    try {
-      final setlistFolder = '${account.cleanRootFolder}/_Setlisten';
-      final fileName = setlist.remoteFileName ?? '${setlist.id}.json';
-      final url = Uri.parse('${account.webDavBaseUrl}$setlistFolder/$fileName');
+    await hasSetlistWritePermission();
 
-      final content = const JsonEncoder.withIndent('  ').convert(setlist.toJson());
+    final setlistPath = '${account.cleanRootFolder}/_Setlisten/${setlist.id}.json';
+    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
+    final content = jsonEncode(setlist.toJson());
+
+    try {
       final res = await _client.put(
         url,
         headers: {
@@ -429,11 +470,13 @@ class _DavItem {
   final String name;
   final bool isCollection;
   final int size;
+  final String etag;
 
   const _DavItem({
     required this.href,
     required this.name,
     required this.isCollection,
     required this.size,
+    this.etag = '',
   });
 }
