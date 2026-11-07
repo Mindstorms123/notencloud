@@ -67,6 +67,7 @@ class Setlist {
   final String createdBy;
   final bool isSyncedWithCloud;
   final String? remoteFileName; // e.g. "2026-12-15_Weihnachtskonzert.json"
+  final String? konzertmeisterAppointmentId; // Linked Konzertmeister gig ID (e.g. "SHAP_...")
 
   const Setlist({
     required this.id,
@@ -78,6 +79,7 @@ class Setlist {
     this.createdBy = '',
     this.isSyncedWithCloud = false,
     this.remoteFileName,
+    this.konzertmeisterAppointmentId,
   });
 
   factory Setlist.create({
@@ -86,6 +88,7 @@ class Setlist {
     String description = '',
     List<SetlistItem> items = const [],
     String createdBy = '',
+    String? konzertmeisterAppointmentId,
   }) {
     final now = DateTime.now();
     final d = date ?? now;
@@ -103,6 +106,7 @@ class Setlist {
       updatedAt: now,
       createdBy: createdBy,
       remoteFileName: fileName,
+      konzertmeisterAppointmentId: konzertmeisterAppointmentId,
     );
   }
 
@@ -114,6 +118,8 @@ class Setlist {
     DateTime? updatedAt,
     bool? isSyncedWithCloud,
     String? remoteFileName,
+    String? konzertmeisterAppointmentId,
+    bool clearKonzertmeisterAppointmentId = false,
   }) {
     return Setlist(
       id: id,
@@ -125,6 +131,9 @@ class Setlist {
       createdBy: createdBy,
       isSyncedWithCloud: isSyncedWithCloud ?? this.isSyncedWithCloud,
       remoteFileName: remoteFileName ?? this.remoteFileName,
+      konzertmeisterAppointmentId: clearKonzertmeisterAppointmentId
+          ? null
+          : (konzertmeisterAppointmentId ?? this.konzertmeisterAppointmentId),
     );
   }
 
@@ -137,6 +146,7 @@ class Setlist {
         'updatedAt': updatedAt.toIso8601String(),
         'createdBy': createdBy,
         'remoteFileName': remoteFileName,
+        'konzertmeisterAppointmentId': konzertmeisterAppointmentId,
       };
 
   factory Setlist.fromJson(Map<String, dynamic> json) => Setlist(
@@ -152,5 +162,6 @@ class Setlist {
         createdBy: json['createdBy'] as String? ?? '',
         isSyncedWithCloud: true,
         remoteFileName: json['remoteFileName'] as String?,
+        konzertmeisterAppointmentId: json['konzertmeisterAppointmentId'] as String?,
       );
 }

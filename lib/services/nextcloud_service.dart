@@ -604,6 +604,61 @@ class NextcloudService {
     return anyDeleted;
   }
 
+  /// Fetch shared Konzertmeister gig-to-setlist assignments from Nextcloud
+  Future<Map<String, String>> fetchKonzertmeisterAssignments() async {
+    for (final path in _candidateSetlistPaths) {
+      final filePath = '$path/konzertmeister_assignments.json';
+      final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+      try {
+        final res = await _client.get(url, headers: _headers);
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+          if (decoded is Map<String, dynamic>) {
+            final rawMap = decoded['assignments'] ?? decoded;
+            if (rawMap is Map<String, dynamic>) {
+              return rawMap.map((k, v) => MapEntry(k.toString(), v.toString()));
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    return {};
+  }
+
+  /// Upload shared Konzertmeister gig-to-setlist assignments to Nextcloud
+  Future<bool> uploadKonzertmeisterAssignments(Map<String, String> assignments) async {
+    final payload = {
+      'version': 1,
+      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedBy': account.username,
+      'assignments': assignments,
+    };
+    final content = jsonEncode(payload);
+
+    for (final path in _candidateSetlistPaths) {
+      final ok = await ensureDirectoryExists(path);
+      if (!ok) continue;
+
+      final filePath = '$path/konzertmeister_assignments.json';
+      final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+
+      try {
+        final res = await _client.put(
+          url,
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          body: utf8.encode(content),
+        );
+        if (res.statusCode == 201 || res.statusCode == 204 || res.statusCode == 200) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
   /// Ensures that all directory levels exist on Nextcloud, creating missing ones via MKCOL
   Future<bool> ensureDirectoryExists(String relativePath) async {
     final clean = relativePath.trim().replaceAll(RegExp(r'^/+|/+$'), '');

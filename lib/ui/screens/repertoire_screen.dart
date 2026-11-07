@@ -456,16 +456,18 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         Navigator.pop(context);
       }
       await _checkOfflineStatus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppTheme.emerald,
-          content: Text(
-            newlyDownloaded > 0
-                ? '$newlyDownloaded neue Stücke heruntergeladen ($alreadyDownloaded waren bereits offline).'
-                : 'Alle $alreadyDownloaded Stücke sind bereits vollständig offline verfügbar!',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.emerald,
+            content: Text(
+              newlyDownloaded > 0
+                  ? '$newlyDownloaded neue Stücke heruntergeladen ($alreadyDownloaded waren bereits offline).'
+                  : 'Alle $alreadyDownloaded Stücke sind bereits vollständig offline verfügbar!',
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
   }
 

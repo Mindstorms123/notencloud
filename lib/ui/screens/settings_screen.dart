@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
@@ -8,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
 import '../../models/pedal_settings.dart';
+import '../../services/konzertmeister_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/pedal_service.dart';
 import '../../services/storage_service.dart';
@@ -66,6 +68,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLearningCustomPrev = false;
   Timer? _pedalTesterTimer;
 
+  // Konzertmeister Integration State
+  bool _isKmEnabled = true;
+  bool _isKmSyncing = false;
+  DateTime? _kmLastSync;
+  final _kmUrlController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _account = widget.storageService.getAccount();
     _defaultCategory = widget.storageService.getDefaultCategory();
     _pedalSettings = widget.storageService.getPedalSettings();
+    _isKmEnabled = widget.storageService.isKonzertmeisterEnabled();
+    _kmLastSync = widget.storageService.getKonzertmeisterLastSync();
+    _kmUrlController.text = widget.storageService.getKonzertmeisterUrl();
     _loadConnectedPedals();
     HardwareKeyboard.instance.addHandler(_handlePedalTesterKeyEvent);
 
@@ -108,7 +119,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _usernameController.dispose();
     _passwordController.dispose();
     _rootFolderController.dispose();
+    _kmUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _syncKonzertmeister() async {
+    setState(() => _isKmSyncing = true);
+    try {
+      final service = KonzertmeisterService(storageService: widget.storageService);
+      final list = await service.fetchAppointments(forceRefresh: true);
+      if (mounted) {
+        setState(() {
+          _isKmSyncing = false;
+          _kmLastSync = widget.storageService.getKonzertmeisterLastSync();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF0284C7),
+            content: Text('${list.length} Konzertmeister Auftritte erfolgreich synchronisiert!'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isKmSyncing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.rose,
+            content: Text('Fehler bei der Synchronisation: $e'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadConnectedPedals({bool showLoading = false}) async {
@@ -1263,6 +1305,157 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400),
                   ],
                 ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Section: Konzertmeister Auftritte & Kalender
+          Material(
+            color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.event_available_rounded, color: Color(0xFF0284C7), size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Konzertmeister Vereinskalender',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            Text(
+                              'Automatische Auftritts-Synchronisation für Setlisten',
+                              style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Auftritte in Setlisten anzeigen', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text(
+                      'Zeigt anstehende Auftritte oben in der Setlisten-Übersicht an, um direkt Setlisten zuzuweisen',
+                      style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                    ),
+                    value: _isKmEnabled,
+                    activeThumbColor: const Color(0xFF0284C7),
+                    onChanged: (val) async {
+                      setState(() => _isKmEnabled = val);
+                      await widget.storageService.setKonzertmeisterEnabled(val);
+                    },
+                  ),
+                  if (_isKmEnabled) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _kmLastSync != null
+                                    ? 'Zuletzt synchronisiert: ${DateFormat('dd.MM.yyyy HH:mm').format(_kmLastSync!)}'
+                                    : 'Noch nicht synchronisiert',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          onPressed: _isKmSyncing ? null : _syncKonzertmeister,
+                          icon: _isKmSyncing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.sync_rounded, size: 16),
+                          label: const Text('Jetzt aktualisieren', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Material(
+                      color: AppTheme.darkSurface.withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: AppTheme.darkBorder.withValues(alpha: 0.7)),
+                      ),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                          leading: const Icon(Icons.link_rounded, size: 18, color: AppTheme.darkTextMuted),
+                          title: const Text('Konzertmeister-URL (Erweitert)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  TextField(
+                                    controller: _kmUrlController,
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Konzertmeister Widget URL',
+                                      hintText: 'https://rest.konzertmeister.app/...',
+                                    ),
+                                    onChanged: (val) {
+                                      widget.storageService.setKonzertmeisterUrl(val.trim());
+                                    },
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton(
+                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                                    onPressed: () {
+                                      _kmUrlController.text = KonzertmeisterService.defaultUrl;
+                                      widget.storageService.setKonzertmeisterUrl(KonzertmeisterService.defaultUrl);
+                                    },
+                                    child: const Text('Auf Standard-Vereinslink zurücksetzen', style: TextStyle(fontSize: 12, color: Color(0xFF0284C7))),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

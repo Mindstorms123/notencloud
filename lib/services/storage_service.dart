@@ -8,6 +8,8 @@ import '../models/nextcloud_account.dart';
 import '../models/pedal_settings.dart';
 import '../models/song.dart';
 import '../models/setlist.dart';
+import '../models/konzertmeister_appointment.dart';
+import 'konzertmeister_service.dart';
 import 'voice_matcher.dart';
 
 class StorageService {
@@ -24,6 +26,11 @@ class StorageService {
   static const _prefAuditInstrumentKey = 'audit_filter_instrument';
   static const _prefAuditSortOptionKey = 'audit_filter_sort_option';
   static const _prefAuditModeKey = 'audit_filter_mode';
+  static const _prefKonzertmeisterAppointmentsKey = 'konzertmeister_appointments';
+  static const _prefKonzertmeisterAssignmentsKey = 'konzertmeister_setlist_assignments';
+  static const _prefKonzertmeisterEnabledKey = 'konzertmeister_enabled';
+  static const _prefKonzertmeisterUrlKey = 'konzertmeister_widget_url';
+  static const _prefKonzertmeisterLastSyncKey = 'konzertmeister_last_sync';
 
   final SharedPreferences _prefs;
 
@@ -384,5 +391,84 @@ class StorageService {
       map[songId] = list;
     }
     await _prefs.setString(_prefIgnoredPartsKey, jsonEncode(map));
+  }
+
+  // --- Konzertmeister Kalender & Auftritte ---
+
+  bool isKonzertmeisterEnabled() {
+    return _prefs.getBool(_prefKonzertmeisterEnabledKey) ?? true;
+  }
+
+  Future<void> setKonzertmeisterEnabled(bool enabled) async {
+    await _prefs.setBool(_prefKonzertmeisterEnabledKey, enabled);
+  }
+
+  String getKonzertmeisterUrl() {
+    return _prefs.getString(_prefKonzertmeisterUrlKey) ?? KonzertmeisterService.defaultUrl;
+  }
+
+  Future<void> setKonzertmeisterUrl(String url) async {
+    await _prefs.setString(_prefKonzertmeisterUrlKey, url);
+  }
+
+  DateTime? getKonzertmeisterLastSync() {
+    final str = _prefs.getString(_prefKonzertmeisterLastSyncKey);
+    if (str == null) return null;
+    return DateTime.tryParse(str);
+  }
+
+  Future<void> setKonzertmeisterLastSync(DateTime dt) async {
+    await _prefs.setString(_prefKonzertmeisterLastSyncKey, dt.toIso8601String());
+  }
+
+  List<KonzertmeisterAppointment> getCachedKonzertmeisterAppointments() {
+    final jsonStr = _prefs.getString(_prefKonzertmeisterAppointmentsKey);
+    if (jsonStr == null || jsonStr.isEmpty) return [];
+    try {
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      return list.map((e) => KonzertmeisterAppointment.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveKonzertmeisterAppointments(List<KonzertmeisterAppointment> appointments) async {
+    final list = appointments.map((a) => a.toJson()).toList();
+    await _prefs.setString(_prefKonzertmeisterAppointmentsKey, jsonEncode(list));
+  }
+
+  Map<String, String> getKonzertmeisterSetlistAssignments() {
+    final jsonStr = _prefs.getString(_prefKonzertmeisterAssignmentsKey);
+    if (jsonStr == null || jsonStr.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return decoded.map((k, v) => MapEntry(k, v.toString()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  String? getAssignedSetlistIdForAppointment(String appointmentId) {
+    return getKonzertmeisterSetlistAssignments()[appointmentId];
+  }
+
+  String? getAssignedAppointmentIdForSetlist(String setlistId) {
+    final map = getKonzertmeisterSetlistAssignments();
+    for (final entry in map.entries) {
+      if (entry.value == setlistId) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  Future<void> setKonzertmeisterSetlistAssignment(String appointmentId, String? setlistId) async {
+    final map = Map<String, String>.from(getKonzertmeisterSetlistAssignments());
+    if (setlistId == null || setlistId.isEmpty) {
+      map.remove(appointmentId);
+    } else {
+      map[appointmentId] = setlistId;
+    }
+    await _prefs.setString(_prefKonzertmeisterAssignmentsKey, jsonEncode(map));
   }
 }
