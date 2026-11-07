@@ -90,6 +90,49 @@ class VoiceMatcher {
     'direktion': ['direktion', 'direktion in c', 'direktion in b', 'conductor', 'lead sheet'],
   };
 
+  /// Aliases for specific percussion sub-instruments
+  static const Map<String, List<String>> percussionSubAliases = {
+    'schlagzeug': [
+      'schlagzeug', 'drums', 'drum set', 'drumset', 'drum-set', 'batterie', 'snare', 'kleine trommel',
+    ],
+    'pauken': [
+      'pauken', 'pauke', 'timpani', 'timp', 'kettledrums',
+    ],
+    'mallets': [
+      'mallets', 'mallet', 'mellods', 'mellod', 'glockenspiel', 'glsp', 'xylophon', 'xylophone',
+      'xylo', 'marimba', 'marimbaphon', 'vibraphon', 'vibraphone', 'vibes', 'bells', 'orchestra bells',
+      'chimes', 'tubular bells', 'roehrenglocken', 'schellen',
+    ],
+    'percussion': [
+      'percussion', 'perkussion', 'perc', 'perk', 'becken', 'cymbals', 'crash', 'ride',
+      'triangel', 'triangle', 'tambourin', 'tambourine', 'tamburin', 'conga', 'congas',
+      'bongo', 'bongos', 'shaker', 'claves', 'castanets', 'kastagnetten', 'tam tam', 'tamtam',
+      'gong', 'woodblock', 'cowbell', 'kuhglocke', 'grosse trommel', 'bass drum',
+    ],
+  };
+
+  /// Detects which specific percussion sub-instrument a part or file name represents
+  static String detectPercussionSubInstrument(String fileName) {
+    final norm = normalize(fileName);
+    for (final entry in percussionSubAliases.entries) {
+      for (final alias in entry.value) {
+        if (norm.contains(alias)) {
+          switch (entry.key) {
+            case 'schlagzeug':
+              return 'Schlagzeug';
+            case 'pauken':
+              return 'Pauken';
+            case 'mallets':
+              return 'Mallets';
+            case 'percussion':
+              return 'Percussion';
+          }
+        }
+      }
+    }
+    return 'Percussion';
+  }
+
   /// Canonical display names with correct capitalization and hyphens
   static const Map<String, String> canonicalDisplayNames = {
     'flöte': 'Flöte',
@@ -335,6 +378,21 @@ class VoiceMatcher {
       }
     }
 
+    // Percussion sub-instrument match (Schlagzeug, Pauken, Mallets, Percussion)
+    if (profile.instrument == 'Percussion' &&
+        profile.percussionInstrument.isNotEmpty &&
+        profile.percussionInstrument != 'Alle') {
+      final partSub = detectPercussionSubInstrument(part.fileName);
+      final reqSub = profile.percussionInstrument;
+      if (partSub.toLowerCase() == reqSub.toLowerCase()) {
+        score += 30;
+        reason = '$reqSub ($reason)';
+      } else {
+        score -= 20;
+        reason = 'Ausweichstimme ($partSub statt $reqSub)';
+      }
+    }
+
     return MatchResult(
       part: part,
       score: score.clamp(0, 100),
@@ -348,7 +406,7 @@ class VoiceMatcher {
 
     final scored = parts
         .map((p) => scorePart(p, profile))
-        .where((r) => r.score >= 50)
+        .where((r) => r.score >= 40)
         .toList();
 
     if (scored.isEmpty) {
@@ -358,10 +416,19 @@ class VoiceMatcher {
     scored.sort((a, b) => b.score.compareTo(a.score));
     final best = scored.first;
 
-    final isExact = profile.voiceNumber == 0 ||
+    bool isExact = profile.voiceNumber == 0 ||
         best.part.detectedVoice == profile.voiceNumber ||
         best.part.isCombinedVoice ||
         best.part.detectedVoice == 0;
+
+    if (profile.instrument == 'Percussion' &&
+        profile.percussionInstrument.isNotEmpty &&
+        profile.percussionInstrument != 'Alle') {
+      final partSub = detectPercussionSubInstrument(best.part.fileName);
+      if (partSub.toLowerCase() != profile.percussionInstrument.toLowerCase()) {
+        isExact = false;
+      }
+    }
 
     return DetailedMatch(
       part: best.part,

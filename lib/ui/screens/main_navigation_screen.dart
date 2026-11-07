@@ -59,6 +59,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         annotationService: _annotationService,
         nextcloudService: _nextcloudService,
         profile: _profile,
+        onProfileUpdated: _onProfileUpdated,
       ),
       SetlistsScreen(
         storageService: widget.storageService,
@@ -68,6 +69,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       SettingsScreen(
         storageService: widget.storageService,
+        profile: _profile,
         onProfileUpdated: _onProfileUpdated,
         onAccountUpdated: _onAccountUpdated,
       ),

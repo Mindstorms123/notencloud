@@ -4,13 +4,23 @@ class MusicianProfile {
   final int voiceNumber; // 1 for 1. Stimme, 2 for 2. Stimme, etc. (0 if not applicable)
   final String keyOrClef; // e.g. "Bb", "C", "Eb", "F", "Bass", "Treble"
   final String customVoiceName; // Optional custom name
+  final String percussionInstrument; // e.g. "Alle", "Schlagzeug", "Pauken", "Mallets", "Percussion"
 
   const MusicianProfile({
     required this.instrument,
     this.voiceNumber = 1,
     this.keyOrClef = '',
     this.customVoiceName = '',
+    this.percussionInstrument = '',
   });
+
+  static const List<String> percussionInstruments = [
+    'Alle',
+    'Schlagzeug',
+    'Pauken',
+    'Mallets',
+    'Percussion',
+  ];
 
   /// Default profile when starting the app for the first time
   factory MusicianProfile.defaultProfile() {
@@ -18,11 +28,21 @@ class MusicianProfile {
       instrument: 'Trompete',
       voiceNumber: 1,
       keyOrClef: 'Bb',
+      percussionInstrument: '',
     );
   }
 
   String get displayName {
     if (customVoiceName.isNotEmpty) return customVoiceName;
+    if (instrument == 'Percussion') {
+      if (percussionInstrument.isNotEmpty && percussionInstrument != 'Alle') {
+        final buffer = StringBuffer('Percussion ($percussionInstrument)');
+        if (voiceNumber > 0) buffer.write(' $voiceNumber');
+        return buffer.toString();
+      }
+      if (voiceNumber > 0) return 'Percussion $voiceNumber';
+      return 'Percussion';
+    }
     final buffer = StringBuffer(instrument);
     if (voiceNumber > 0) buffer.write(' $voiceNumber');
     if (keyOrClef.isNotEmpty) buffer.write(' ($keyOrClef)');
@@ -34,6 +54,7 @@ class MusicianProfile {
         'voiceNumber': voiceNumber,
         'keyOrClef': keyOrClef,
         'customVoiceName': customVoiceName,
+        'percussionInstrument': percussionInstrument,
       };
 
   factory MusicianProfile.fromJson(Map<String, dynamic> json) {
@@ -42,6 +63,7 @@ class MusicianProfile {
       voiceNumber: json['voiceNumber'] as int? ?? 1,
       keyOrClef: json['keyOrClef'] as String? ?? '',
       customVoiceName: json['customVoiceName'] as String? ?? '',
+      percussionInstrument: json['percussionInstrument'] as String? ?? '',
     );
   }
 
@@ -50,12 +72,14 @@ class MusicianProfile {
     int? voiceNumber,
     String? keyOrClef,
     String? customVoiceName,
+    String? percussionInstrument,
   }) {
     return MusicianProfile(
       instrument: instrument ?? this.instrument,
       voiceNumber: voiceNumber ?? this.voiceNumber,
       keyOrClef: keyOrClef ?? this.keyOrClef,
       customVoiceName: customVoiceName ?? this.customVoiceName,
+      percussionInstrument: percussionInstrument ?? this.percussionInstrument,
     );
   }
 

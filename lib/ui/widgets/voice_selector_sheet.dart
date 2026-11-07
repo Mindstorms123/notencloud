@@ -138,12 +138,37 @@ class VoiceSelectorSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  title: Text(
-                    part.fileName,
-                    style: TextStyle(
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                      color: isCurrent ? AppTheme.darkTextPrimary : AppTheme.darkTextSecondary,
-                    ),
+                  title: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          part.fileName,
+                          style: TextStyle(
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                            color: isCurrent ? AppTheme.darkTextPrimary : AppTheme.darkTextSecondary,
+                          ),
+                        ),
+                      ),
+                      if (part.detectedInstrument == 'Percussion') ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryLight.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.3)),
+                          ),
+                          child: Text(
+                            VoiceMatcher.detectPercussionSubInstrument(part.fileName),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryLight,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   subtitle: Text(
                     match.reason,

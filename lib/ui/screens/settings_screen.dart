@@ -12,12 +12,14 @@ import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StorageService storageService;
+  final MusicianProfile profile;
   final Function(MusicianProfile) onProfileUpdated;
   final Function(NextcloudAccount) onAccountUpdated;
 
   const SettingsScreen({
     super.key,
     required this.storageService,
+    required this.profile,
     required this.onProfileUpdated,
     required this.onAccountUpdated,
   });
@@ -43,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _profile = widget.storageService.getProfile();
+    _profile = widget.profile;
     _account = widget.storageService.getAccount();
     _defaultCategory = widget.storageService.getDefaultCategory();
 
@@ -51,6 +53,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _usernameController.text = _account.username;
     _passwordController.text = _account.password;
     _rootFolderController.text = _account.rootFolder;
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.profile != oldWidget.profile) {
+      setState(() {
+        _profile = widget.profile;
+      });
+    }
   }
 
   @override
@@ -536,6 +548,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                 ),
+                if (_profile.instrument == 'Percussion') ...[
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('perc_sub_${_profile.percussionInstrument}'),
+                    initialValue: _profile.percussionInstrument.isEmpty
+                        ? 'Alle'
+                        : _profile.percussionInstrument,
+                    decoration: const InputDecoration(
+                      labelText: 'Schlagwerk-Instrument',
+                      prefixIcon: Icon(Icons.album_rounded),
+                      helperText: 'Standard-Instrument für Percussion (z.B. Schlagzeug, Pauken, Mallets)',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Alle', child: Text('Alle / Flexibel')),
+                      DropdownMenuItem(value: 'Schlagzeug', child: Text('Schlagzeug / Drums')),
+                      DropdownMenuItem(value: 'Pauken', child: Text('Pauken (Timpani)')),
+                      DropdownMenuItem(value: 'Mallets', child: Text('Mallets (Glockenspiel, Xylo)')),
+                      DropdownMenuItem(value: 'Percussion', child: Text('Percussion (Becken, Perc. 1/2)')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _profile = _profile.copyWith(percussionInstrument: val);
+                        });
+                        _saveProfile();
+                      }
+                    },
+                  ),
+                ],
                 const SizedBox(height: 14),
 
                 // Default Start Category / Folder

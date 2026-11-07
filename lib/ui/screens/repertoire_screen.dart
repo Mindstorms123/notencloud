@@ -16,6 +16,7 @@ class RepertoireScreen extends StatefulWidget {
   final AnnotationService annotationService;
   final NextcloudService? nextcloudService;
   final MusicianProfile profile;
+  final ValueChanged<MusicianProfile>? onProfileUpdated;
 
   const RepertoireScreen({
     super.key,
@@ -23,6 +24,7 @@ class RepertoireScreen extends StatefulWidget {
     required this.annotationService,
     this.nextcloudService,
     required this.profile,
+    this.onProfileUpdated,
   });
 
   @override
@@ -53,6 +55,17 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         _syncWithCloud(isBackground: true);
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant RepertoireScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.profile != oldWidget.profile) {
+      setState(() {
+        _activeProfile = widget.profile;
+        _onSearchChanged();
+      });
+    }
   }
 
   @override
@@ -130,6 +143,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
           });
           if (savePermanently) {
             await widget.storageService.saveProfile(updatedProfile);
+            widget.onProfileUpdated?.call(updatedProfile);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -141,6 +155,75 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             }
           }
         },
+      ),
+    );
+  }
+
+  void _setPercussionSubInstrument(String sub) {
+    final updated = _activeProfile.copyWith(percussionInstrument: sub);
+    setState(() {
+      _activeProfile = updated;
+      _onSearchChanged();
+    });
+    widget.storageService.saveProfile(updated);
+    widget.onProfileUpdated?.call(updated);
+  }
+
+  Widget _buildPercussionChip({
+    required String label,
+    required IconData icon,
+    required String subValue,
+    required bool isDark,
+  }) {
+    final currentSub = _activeProfile.percussionInstrument.isEmpty
+        ? 'Alle'
+        : _activeProfile.percussionInstrument;
+    final isSelected = currentSub.toLowerCase() == subValue.toLowerCase();
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _setPercussionSubInstrument(subValue),
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.primaryLight
+                : (isDark ? AppTheme.darkCard : Colors.grey.shade100),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.primaryLight
+                  : (isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
+              width: isSelected ? 1.5 : 1.0,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected
+                      ? Colors.white
+                      : (isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -527,6 +610,54 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             ),
           ),
 
+          // Percussion Sub-Instrument Quick-Selector (Schnellauswahl)
+          if (_activeProfile.instrument == 'Percussion')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    _buildPercussionChip(
+                      label: 'Alle',
+                      icon: Icons.auto_awesome_rounded,
+                      subValue: 'Alle',
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildPercussionChip(
+                      label: 'Schlagzeug',
+                      icon: Icons.album_rounded,
+                      subValue: 'Schlagzeug',
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildPercussionChip(
+                      label: 'Pauken',
+                      icon: Icons.radio_button_checked_rounded,
+                      subValue: 'Pauken',
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildPercussionChip(
+                      label: 'Mallets',
+                      icon: Icons.piano_rounded,
+                      subValue: 'Mallets',
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildPercussionChip(
+                      label: 'Percussion',
+                      icon: Icons.music_note_rounded,
+                      subValue: 'Percussion',
+                      isDark: isDark,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Live Sync Progress Bar (only shown during active user sync)
           if (_isSyncing && !_isBackgroundSyncing)
             Container(
@@ -796,7 +927,11 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                                     Flexible(
                                                       child: Text(
                                                         isFallback
-                                                            ? 'Keine ${_activeProfile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
+                                                            ? (_activeProfile.instrument == 'Percussion' &&
+                                                                    _activeProfile.percussionInstrument.isNotEmpty &&
+                                                                    _activeProfile.percussionInstrument != 'Alle'
+                                                                ? 'Keine ${_activeProfile.percussionInstrument} • Ersatz: ${bestMatch.fileName}'
+                                                                : 'Keine ${_activeProfile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}')
                                                             : bestMatch.fileName,
                                                         maxLines: 1,
                                                         overflow: TextOverflow.ellipsis,

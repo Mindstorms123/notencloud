@@ -26,6 +26,7 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
   late String _selectedInstrument;
   late int _selectedVoice;
   late String _selectedKey;
+  late String _selectedPercussionInstrument;
   late bool _onlyMyVoice;
   bool _saveAsDefault = false;
 
@@ -35,6 +36,9 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
     _selectedInstrument = widget.currentProfile.instrument;
     _selectedVoice = widget.currentProfile.voiceNumber;
     _selectedKey = widget.currentProfile.keyOrClef;
+    _selectedPercussionInstrument = widget.currentProfile.percussionInstrument.isEmpty
+        ? 'Alle'
+        : widget.currentProfile.percussionInstrument;
     _onlyMyVoice = widget.onlyMyVoice;
   }
 
@@ -190,6 +194,60 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
                 );
               }).toList(),
             ),
+
+            // Percussion Sub-Instrument Section (only shown when Percussion is selected)
+            if (_selectedInstrument == 'Percussion') ...[
+              const SizedBox(height: 20),
+              const Row(
+                children: [
+                  Icon(Icons.album_rounded, size: 16, color: AppTheme.primaryLight),
+                  SizedBox(width: 6),
+                  Text(
+                    'GESPIELTES SCHLAGWERK-INSTRUMENT',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: AppTheme.primaryLight,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: MusicianProfile.percussionInstruments.map((sub) {
+                    final isSelected = _selectedPercussionInstrument.toLowerCase() == sub.toLowerCase();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(sub == 'Alle' ? 'Alle / Flexibel' : sub),
+                        selected: isSelected,
+                        selectedColor: AppTheme.primary,
+                        backgroundColor: AppTheme.darkCard,
+                        side: BorderSide(
+                          color: isSelected ? AppTheme.primaryLight : AppTheme.darkBorder,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? Colors.white : AppTheme.darkTextPrimary,
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _selectedPercussionInstrument = sub;
+                            });
+                          }
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
 
             const SizedBox(height: 20),
 
@@ -353,6 +411,9 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
                         instrument: _selectedInstrument,
                         voiceNumber: _selectedVoice,
                         keyOrClef: _selectedKey,
+                        percussionInstrument: _selectedInstrument == 'Percussion'
+                            ? _selectedPercussionInstrument
+                            : '',
                       );
                       widget.onApply(updatedProfile, _onlyMyVoice, _saveAsDefault);
                       Navigator.pop(context);

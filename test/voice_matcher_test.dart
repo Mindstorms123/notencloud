@@ -99,5 +99,51 @@ void main() {
       expect(best, isNotNull);
       expect(best!.fileName, 'Schlagzeug.pdf');
     });
+
+    test('detects specific percussion sub-instruments correctly', () {
+      expect(VoiceMatcher.detectPercussionSubInstrument('Schlagzeug.pdf'), 'Schlagzeug');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Song - Drums.pdf'), 'Schlagzeug');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Pauken.pdf'), 'Pauken');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Timpani_in_F.pdf'), 'Pauken');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Mallets.pdf'), 'Mallets');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Glockenspiel.pdf'), 'Mallets');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Mellods_1.pdf'), 'Mallets');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Percussion_1.pdf'), 'Percussion');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Becken_Triangel.pdf'), 'Percussion');
+    });
+
+    test('prioritizes selected percussion sub-instrument (e.g. Pauken)', () {
+      const paukenProfile = MusicianProfile(
+        instrument: 'Percussion',
+        percussionInstrument: 'Pauken',
+      );
+      final parts = [
+        VoiceMatcher.parsePartFileName('01_Partitur.pdf', 's', '/1'),
+        VoiceMatcher.parsePartFileName('Schlagzeug.pdf', 's', '/2'),
+        VoiceMatcher.parsePartFileName('Pauken.pdf', 's', '/3'),
+        VoiceMatcher.parsePartFileName('Mallets.pdf', 's', '/4'),
+      ];
+
+      final match = VoiceMatcher.findDetailedMatch(parts, paukenProfile);
+      expect(match, isNotNull);
+      expect(match!.part.fileName, 'Pauken.pdf');
+      expect(match.quality, MatchQuality.exact);
+    });
+
+    test('falls back with warning when requested percussion sub-instrument is missing', () {
+      const malletsProfile = MusicianProfile(
+        instrument: 'Percussion',
+        percussionInstrument: 'Mallets',
+      );
+      final parts = [
+        VoiceMatcher.parsePartFileName('01_Partitur.pdf', 's', '/1'),
+        VoiceMatcher.parsePartFileName('Schlagzeug.pdf', 's', '/2'),
+      ];
+
+      final match = VoiceMatcher.findDetailedMatch(parts, malletsProfile);
+      expect(match, isNotNull);
+      expect(match!.part.fileName, 'Schlagzeug.pdf');
+      expect(match.quality, MatchQuality.fallback);
+    });
   });
 }

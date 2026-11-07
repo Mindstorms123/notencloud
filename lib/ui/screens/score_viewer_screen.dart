@@ -274,10 +274,18 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   Widget build(BuildContext context) {
     final currentAnn = _pageAnnotations[_currentPage] ?? PageAnnotations(pageIndex: _currentPage);
     final inSetlistMode = widget.currentSetlist != null;
-    final isExactVoice = widget.profile.voiceNumber == 0 ||
+    bool isExactVoice = widget.profile.voiceNumber == 0 ||
         _currentPart.detectedVoice == widget.profile.voiceNumber ||
         _currentPart.isCombinedVoice ||
         _currentPart.detectedVoice == 0;
+    if (widget.profile.instrument == 'Percussion' &&
+        widget.profile.percussionInstrument.isNotEmpty &&
+        widget.profile.percussionInstrument != 'Alle') {
+      final partSub = VoiceMatcher.detectPercussionSubInstrument(_currentPart.fileName);
+      if (partSub.toLowerCase() != widget.profile.percussionInstrument.toLowerCase()) {
+        isExactVoice = false;
+      }
+    }
     final isDoc = _currentSong.isDocumentOrList;
     final voiceColor = isDoc
         ? AppTheme.primaryLight
@@ -341,7 +349,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                                 ? _currentPart.fileName
                                 : (isExactVoice
                                     ? _currentPart.fileName
-                                    : 'Keine ${widget.profile.voiceNumber}. Stimme • Ausweichstimme: ${_currentPart.fileName}'),
+                                    : (widget.profile.instrument == 'Percussion' &&
+                                            widget.profile.percussionInstrument.isNotEmpty &&
+                                            widget.profile.percussionInstrument != 'Alle'
+                                        ? 'Keine ${widget.profile.percussionInstrument} • Ausweichstimme: ${_currentPart.fileName}'
+                                        : 'Keine ${widget.profile.voiceNumber}. Stimme • Ausweichstimme: ${_currentPart.fileName}')),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
