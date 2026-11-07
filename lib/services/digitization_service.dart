@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/song.dart';
+import 'edition_lookup_service.dart';
 import 'voice_matcher.dart';
 
 enum AuditMode {
@@ -354,8 +355,18 @@ class DigitizationService {
           : standardRequirements.where((r) => r.isCore).toList();
 
       for (final req in requirements) {
-        // Smart mode exclusions for non-existent instruments in modern literature
+        // Smart mode exclusions for non-existent instruments in modern literature & specific publisher editions
         if (mode == AuditMode.smartBesetzung) {
+          final edition = EditionLookupService.getEdition(song.title);
+          if (edition != null) {
+            final naturallyMissing = edition.naturallyMissingInstruments;
+            if (naturallyMissing.contains(req.instrument) ||
+                naturallyMissing.contains(req.displayName) ||
+                naturallyMissing.contains('${req.instrument} ${req.voiceNumber}')) {
+              continue;
+            }
+          }
+
           if (req.instrument == 'Flügelhorn' && !isFluegelhornExpectedForSong(song)) {
             continue;
           }

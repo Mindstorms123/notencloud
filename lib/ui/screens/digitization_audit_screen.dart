@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/song.dart';
 import '../../services/digitization_service.dart';
+import '../../services/edition_lookup_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
+
+enum AuditStatusFilter {
+  all,
+  incomplete,
+  complete,
+}
 
 class DigitizationAuditScreen extends StatefulWidget {
   final List<Song> allSongs;
@@ -29,7 +37,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   String _searchQuery = '';
   String _selectedCategory = 'Alle Kategorien';
   String _selectedInstrument = 'Alle Instrumente';
-  bool _onlyIncomplete = true;
+  AuditStatusFilter _statusFilter = AuditStatusFilter.all; // Show all pieces by default so complete pieces are visible!
 
   late List<Song> _currentSongs;
   late List<SongDigitizationReport> _reports;
@@ -155,8 +163,9 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
 
   List<SongDigitizationReport> get _filteredReports {
     return _reports.where((r) {
-      // 1. Completion filter
-      if (_onlyIncomplete && r.isComplete) return false;
+      // 1. Completion / Status filter
+      if (_statusFilter == AuditStatusFilter.incomplete && r.isComplete) return false;
+      if (_statusFilter == AuditStatusFilter.complete && !r.isComplete) return false;
 
       // 2. Category filter
       if (_selectedCategory != 'Alle Kategorien' && r.song.category != _selectedCategory) {
@@ -165,10 +174,17 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
 
       // 3. Instrument filter
       if (_selectedInstrument != 'Alle Instrumente') {
-        final matches = r.missingParts.any(
-          (m) => m.toLowerCase().contains(_selectedInstrument.toLowerCase()),
-        );
-        if (!matches) return false;
+        final query = _selectedInstrument.toLowerCase();
+        final matchesMissing = r.missingParts.any((m) => m.toLowerCase().contains(query));
+        final matchesPresent = r.presentParts.any((p) => p.toLowerCase().contains(query));
+
+        if (_statusFilter == AuditStatusFilter.complete) {
+          if (!matchesPresent) return false;
+        } else if (_statusFilter == AuditStatusFilter.incomplete) {
+          if (!matchesMissing) return false;
+        } else {
+          if (!matchesMissing && !matchesPresent) return false;
+        }
       }
 
       // 4. Search query
@@ -176,9 +192,11 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
         final title = r.song.title.toLowerCase();
         final folder = r.song.folderName.toLowerCase();
         final missing = r.missingParts.join(' ').toLowerCase();
+        final present = r.presentParts.join(' ').toLowerCase();
         if (!title.contains(_searchQuery) &&
             !folder.contains(_searchQuery) &&
-            !missing.contains(_searchQuery)) {
+            !missing.contains(_searchQuery) &&
+            !present.contains(_searchQuery)) {
           return false;
         }
       }
@@ -355,7 +373,105 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                     '${r.song.category} • ${r.completionPercentage.round()}% digitalisiert (${r.totalPresent} von ${r.totalExpected} Stimmen)',
                     style: const TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+
+                  // Publisher Edition & Online-Lookup Card
+                  Builder(builder: (context) {
+                    final edition = EditionLookupService.getEdition(r.song.title);
+                    final alleNotenUrl = EditionLookupService.getAlleNotenSearchUrl(r.song.title);
+                    final googleUrl = EditionLookupService.getGoogleBesetzungUrl(r.song.title);
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryLight.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.menu_book_rounded, color: AppTheme.primaryLight, size: 18),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'VERLAGSAUSGABE & BESETZUNG',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryLight, letterSpacing: 0.5),
+                              ),
+                              const Spacer(),
+                              if (edition != null && edition.publisher.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryLight.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    edition.publisher,
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (edition != null) ...[
+                            const SizedBox(height: 8),
+                            if (edition.arranger.isNotEmpty)
+                              Text(
+                                'Arrangement: ${edition.arranger}${edition.series.isNotEmpty ? " • ${edition.series}" : ""}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                              ),
+                            if (edition.instrumentationNote.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                edition.instrumentationNote,
+                                style: const TextStyle(fontSize: 11, color: AppTheme.darkTextSecondary, height: 1.3),
+                              ),
+                            ],
+                          ],
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                                  label: const Text('Alle-Noten.de', style: TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryLight,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => launchUrl(
+                                    Uri.parse(alleNotenUrl),
+                                    mode: LaunchMode.externalApplication,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.search_rounded, size: 14),
+                                  label: const Text('Google Besetzung', style: TextStyle(fontSize: 12)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.darkTextPrimary,
+                                    side: const BorderSide(color: AppTheme.darkBorder),
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => launchUrl(
+                                    Uri.parse(googleUrl),
+                                    mode: LaunchMode.externalApplication,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
 
                   // Missing section
                   if (r.missingParts.isNotEmpty) ...[
@@ -391,6 +507,34 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                                   .where((m) => m.toLowerCase().contains('flügelhorn') || m.toLowerCase().contains('fluegel'))
                                   .toList();
                               await widget.storageService.setPartsIgnored(r.song.id, fluegelParts, true);
+                              if (mounted && ctx.mounted) {
+                                setState(() => _recomputeReports());
+                                Navigator.pop(ctx);
+                                final updated = _reports.firstWhere((rep) => rep.song.id == r.song.id);
+                                _showSongDetailsModal(updated);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+
+                    // Quick action button: "Alle fehlenden Stimmen dieser Ausgabe ausblenden (nicht im Original)"
+                    if (r.missingParts.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.done_all_rounded, size: 16, color: AppTheme.emerald),
+                            label: Text('Alle ${r.missingParts.length} Stimmen als "nicht im Original" markieren', style: const TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.emerald,
+                              side: BorderSide(color: AppTheme.emerald.withValues(alpha: 0.5)),
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () async {
+                              await widget.storageService.setPartsIgnored(r.song.id, r.missingParts, true);
                               if (mounted && ctx.mounted) {
                                 setState(() => _recomputeReports());
                                 Navigator.pop(ctx);
@@ -749,9 +893,15 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white),
-                    _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald),
-                    _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber),
+                    _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white,
+                        isSelected: _statusFilter == AuditStatusFilter.all,
+                        onTap: () => setState(() => _statusFilter = AuditStatusFilter.all)),
+                    _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald,
+                        isSelected: _statusFilter == AuditStatusFilter.complete,
+                        onTap: () => setState(() => _statusFilter = AuditStatusFilter.complete)),
+                    _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber,
+                        isSelected: _statusFilter == AuditStatusFilter.incomplete,
+                        onTap: () => setState(() => _statusFilter = AuditStatusFilter.incomplete)),
                     _buildStatItem('Fehlt gesamt', '${_summary.totalMissingParts}', AppTheme.rose),
                   ],
                 ),
@@ -961,35 +1111,61 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
               ),
             ),
 
-          // 3. Search & Filters Bar
+          // 3. Search Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Stück, Verlag oder Stimme suchen...',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 16),
+                        onPressed: () => _searchController.clear(),
+                      )
+                    : null,
+              ),
+            ),
+          ),
+
+          // 3.5 Status Filter Buttons (Alle / Fehlend / Vollständig)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Stück oder Stimme suchen...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 16),
-                              onPressed: () => _searchController.clear(),
-                            )
-                          : null,
-                    ),
+                  child: _buildFilterTab(
+                    title: 'Alle',
+                    count: _summary.totalSongs,
+                    isActive: _statusFilter == AuditStatusFilter.all,
+                    color: Colors.white,
+                    onTap: () => setState(() => _statusFilter = AuditStatusFilter.all),
                   ),
                 ),
                 const SizedBox(width: 8),
-                FilterChip(
-                  selected: _onlyIncomplete,
-                  label: const Text('Nur fehlende'),
-                  onSelected: (sel) {
-                    setState(() => _onlyIncomplete = sel);
-                  },
+                Expanded(
+                  child: _buildFilterTab(
+                    title: 'Fehlend',
+                    count: _summary.incompleteSongs,
+                    isActive: _statusFilter == AuditStatusFilter.incomplete,
+                    color: AppTheme.amber,
+                    icon: Icons.warning_amber_rounded,
+                    onTap: () => setState(() => _statusFilter = AuditStatusFilter.incomplete),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildFilterTab(
+                    title: 'Vollständig',
+                    count: _summary.completeSongs,
+                    isActive: _statusFilter == AuditStatusFilter.complete,
+                    color: AppTheme.emerald,
+                    icon: Icons.check_circle_rounded,
+                    onTap: () => setState(() => _statusFilter = AuditStatusFilter.complete),
+                  ),
                 ),
               ],
             ),
@@ -1072,9 +1248,11 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                                 const Icon(Icons.check_circle_outline_rounded, color: AppTheme.emerald, size: 48),
                                 const SizedBox(height: 12),
                                 Text(
-                                  _onlyIncomplete
+                                  _statusFilter == AuditStatusFilter.incomplete
                                       ? 'Keine fehlenden Noten in dieser Auswahl gefunden!'
-                                      : 'Keine Stücke gefunden.',
+                                      : (_statusFilter == AuditStatusFilter.complete
+                                          ? 'Keine vollständig digitalisierten Stücke in dieser Auswahl.'
+                                          : 'Keine Stücke gefunden.'),
                                   style: const TextStyle(color: AppTheme.darkTextSecondary),
                                 ),
                               ],
@@ -1099,14 +1277,92 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color) {
-    return Expanded(
+  Widget _buildStatItem(String label, String value, Color color,
+      {bool isSelected = false, VoidCallback? onTap}) {
+    final item = Container(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      decoration: BoxDecoration(
+        color: isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSelected ? color.withValues(alpha: 0.5) : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+              if (isSelected) ...[
+                const SizedBox(width: 3),
+                Icon(Icons.check_rounded, size: 14, color: color),
+              ],
+            ],
+          ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.darkTextMuted)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isSelected ? color : AppTheme.darkTextMuted,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
         ],
+      ),
+    );
+
+    return Expanded(
+      child: onTap != null
+          ? InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onTap,
+              child: item,
+            )
+          : item,
+    );
+  }
+
+  Widget _buildFilterTab({
+    required String title,
+    required int count,
+    required bool isActive,
+    required Color color,
+    IconData? icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(
+          color: isActive ? color.withValues(alpha: 0.18) : AppTheme.darkCard,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? color : AppTheme.darkBorder,
+            width: isActive ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: isActive ? color : AppTheme.darkTextMuted),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              '$title ($count)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                color: isActive ? color : AppTheme.darkTextSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1114,6 +1370,13 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   Widget _buildSongAuditCard(SongDigitizationReport r) {
     final pct = r.completionPercentage.round();
     final isComplete = r.isComplete;
+    final edition = EditionLookupService.getEdition(r.song.title);
+
+    final subtitleParts = <String>[r.song.category];
+    if (edition != null && edition.publisher.isNotEmpty) {
+      subtitleParts.add(edition.publisher);
+    }
+    subtitleParts.add('${r.totalPresent} Stimmen digitalisiert');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1121,7 +1384,8 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isComplete ? AppTheme.emerald.withValues(alpha: 0.2) : AppTheme.darkBorder,
+          color: isComplete ? AppTheme.emerald.withValues(alpha: 0.45) : AppTheme.darkBorder,
+          width: isComplete ? 1.5 : 1.0,
         ),
       ),
       child: InkWell(
@@ -1145,7 +1409,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${r.song.category} • ${r.totalPresent} Stimmen digitalisiert',
+                          subtitleParts.join(' • '),
                           style: const TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
                         ),
                       ],
@@ -1187,8 +1451,49 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                 ),
               ),
 
+              const SizedBox(height: 8),
+
+              // Quick footer row: Online link on the right, status on the left
+              Row(
+                children: [
+                  if (isComplete)
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_rounded, size: 14, color: AppTheme.emerald),
+                        SizedBox(width: 4),
+                        Text(
+                          'Alle Stimmen vollständig!',
+                          style: TextStyle(color: AppTheme.emerald, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    )
+                  else
+                    const SizedBox.shrink(),
+                  const Spacer(),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => launchUrl(
+                      Uri.parse(EditionLookupService.getAlleNotenSearchUrl(r.song.title)),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Alle-Noten.de', style: TextStyle(fontSize: 10, color: AppTheme.primaryLight, fontWeight: FontWeight.w600)),
+                          SizedBox(width: 3),
+                          Icon(Icons.open_in_new_rounded, size: 11, color: AppTheme.primaryLight),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
               if (r.missingParts.isNotEmpty) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 Builder(
                   builder: (context) {
                     final sortedMissing = _getSortedMissingParts(r.missingParts);

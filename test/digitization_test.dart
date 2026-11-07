@@ -373,5 +373,72 @@ void main() {
 
       expect(find.textContaining('Keine Nextcloud-Verbindung verfügbar'), findsOneWidget);
     });
+
+    testWidgets('status filter tabs toggle between all, incomplete, and complete pieces', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() async => await tester.binding.setSurfaceSize(null));
+
+      final completeSong = createSampleSong(
+        title: 'Complete Rock Song',
+        category: 'Rock',
+        fileNames: [
+          'Partitur.pdf',
+          'Flöte 1 in C.pdf',
+          'Flöte 2 in C.pdf',
+          'Klarinette 1 in Bb.pdf',
+          'Klarinette 2 in Bb.pdf',
+          'Altsaxophon 1 in Eb.pdf',
+          'Altsaxophon 2 in Eb.pdf',
+          'Tenorsaxophon 1 in Bb.pdf',
+          'Trompete 1 in Bb.pdf',
+          'Trompete 2 in Bb.pdf',
+          'Flügelhorn 1 in Bb.pdf',
+          'Waldhorn 1 in F.pdf',
+          'Waldhorn 2 in F.pdf',
+          'Tenorhorn 1 in Bb.pdf',
+          'Bariton in C.pdf',
+          'Posaune 1 in C.pdf',
+          'Posaune 2 in C.pdf',
+          'Tuba 1 in C.pdf',
+          'Percussion.pdf',
+        ],
+      );
+
+      final incompleteSong = createSampleSong(
+        title: 'Incomplete Polka',
+        category: 'Polka',
+        fileNames: ['Trompete 1 in Bb.pdf'],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DigitizationAuditScreen(
+            allSongs: [completeSong, incompleteSong],
+            storageService: storageService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // By default in 'Alle' mode, both songs are visible!
+      expect(find.text('Complete Rock Song'), findsOneWidget);
+      expect(find.text('Incomplete Polka'), findsOneWidget);
+
+      // Tap 'Vollständig' filter tab (in filter bar)
+      await tester.tap(find.text('Vollständig (1)'));
+      await tester.pumpAndSettle();
+
+      // Only the complete song is visible now!
+      expect(find.text('Complete Rock Song'), findsOneWidget);
+      expect(find.text('Incomplete Polka'), findsNothing);
+
+      // Tap 'Fehlend' filter tab
+      await tester.tap(find.text('Fehlend (1)'));
+      await tester.pumpAndSettle();
+
+      // Only the incomplete song is visible!
+      expect(find.text('Complete Rock Song'), findsNothing);
+      expect(find.text('Incomplete Polka'), findsOneWidget);
+    });
   });
 }
