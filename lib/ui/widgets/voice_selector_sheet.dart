@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/musician_profile.dart';
 import '../../models/song.dart';
 import '../../services/voice_matcher.dart';
+import '../theme/app_theme.dart';
 
 class VoiceSelectorSheet extends StatelessWidget {
   final Song song;
@@ -19,10 +20,16 @@ class VoiceSelectorSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasExactMatch = song.parts.any((p) {
+      final m = VoiceMatcher.scorePart(p, profile);
+      return m.score >= 80;
+    });
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: const BoxDecoration(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -33,32 +40,65 @@ class VoiceSelectorSheet extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      song.title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Stimmen-Auswahl (${song.parts.length} Stimmen vorhanden)',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey,
-                          ),
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.darkTextPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Stimmenauswahl (${song.parts.length} Stimmen vorhanden)',
+                        style: const TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close_rounded, color: AppTheme.darkTextMuted),
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
           ),
-          const Divider(height: 24),
+
+          // Explanatory banner if no exact match exists
+          if (!hasExactMatch)
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.amber.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, color: AppTheme.amber, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Für dieses Stück ist keine ${profile.voiceNumber}. ${profile.instrument}-Stimme vorhanden. Als Ausweichstimme ist "${currentPart.fileName}" ausgewählt.',
+                      style: const TextStyle(
+                        color: AppTheme.amber,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          const Divider(height: 24, color: AppTheme.darkBorder),
           Flexible(
             child: ListView.builder(
               shrinkWrap: true,
@@ -67,57 +107,86 @@ class VoiceSelectorSheet extends StatelessWidget {
                 final part = song.parts[index];
                 final isCurrent = part.id == currentPart.id;
                 final match = VoiceMatcher.scorePart(part, profile);
+                final isExact = match.score >= 80;
+                final isFallback = isCurrent && !isExact;
 
                 return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isCurrent
-                        ? Theme.of(context).primaryColor
-                        : match.score >= 80
-                            ? Colors.green.shade100
-                            : Colors.grey.shade200,
-                    foregroundColor: isCurrent
-                        ? Colors.white
-                        : match.score >= 80
-                            ? Colors.green.shade800
-                            : Colors.black87,
-                    child: Icon(
-                      part.fileName.toLowerCase().contains('partitur')
-                          ? Icons.menu_book
-                          : Icons.music_note,
-                      size: 20,
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? (isExact
+                              ? AppTheme.emerald.withValues(alpha: 0.2)
+                              : AppTheme.amber.withValues(alpha: 0.2))
+                          : AppTheme.darkCard,
+                      borderRadius: BorderRadius.circular(10),
+                      border: isCurrent
+                          ? Border.all(
+                              color: isExact ? AppTheme.emerald : AppTheme.amber, width: 1.5)
+                          : Border.all(color: AppTheme.darkBorder),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        isCurrent ? Icons.check_circle_rounded : Icons.music_note_rounded,
+                        color: isCurrent
+                            ? (isExact ? AppTheme.emerald : AppTheme.amber)
+                            : AppTheme.darkTextMuted,
+                        size: 20,
+                      ),
                     ),
                   ),
                   title: Text(
                     part.fileName,
                     style: TextStyle(
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                      color: isCurrent ? AppTheme.darkTextPrimary : AppTheme.darkTextSecondary,
                     ),
                   ),
                   subtitle: Text(
                     match.reason,
                     style: TextStyle(
-                      color: match.score >= 80 ? Colors.green.shade700 : Colors.grey,
+                      color: isExact
+                          ? AppTheme.emerald
+                          : (isFallback ? AppTheme.amber : AppTheme.darkTextMuted),
                       fontSize: 12,
                     ),
                   ),
-                  trailing: match.score >= 80
+                  trailing: isExact
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            border: Border.all(color: Colors.green.shade300),
-                            borderRadius: BorderRadius.circular(12),
+                            color: AppTheme.emerald.withValues(alpha: 0.15),
+                            border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.4)),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
                             'Deine Stimme',
                             style: TextStyle(
-                              color: Colors.green,
+                              color: AppTheme.emerald,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         )
-                      : null,
+                      : (isFallback
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppTheme.amber.withValues(alpha: 0.15),
+                                border: Border.all(color: AppTheme.amber.withValues(alpha: 0.4)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Ausweichstimme',
+                                style: TextStyle(
+                                  color: AppTheme.amber,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : null),
                   onTap: () {
                     onSelectPart(part);
                     Navigator.pop(context);

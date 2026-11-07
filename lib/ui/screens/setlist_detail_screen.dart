@@ -626,7 +626,9 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                         (s) => s.id == item.songId || s.folderName == item.songFolderName,
                         orElse: () => Song(id: item.songId, title: item.songTitle, folderName: item.songFolderName, remoteFolderPath: ''),
                       );
-                      final bestMatch = VoiceMatcher.findBestMatch(song.parts, widget.profile);
+                      final match = VoiceMatcher.findDetailedMatch(song.parts, widget.profile);
+                      final bestMatch = match?.part;
+                      final isFallback = match?.isFallback ?? false;
 
                       return Dismissible(
                         key: ValueKey(item.id),
@@ -708,14 +710,20 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: AppTheme.emerald.withValues(alpha: 0.12),
+                                                    color: isFallback
+                                                        ? AppTheme.amber.withValues(alpha: 0.15)
+                                                        : AppTheme.emerald.withValues(alpha: 0.12),
                                                     borderRadius: BorderRadius.circular(6),
                                                   ),
                                                   child: Text(
-                                                    bestMatch.fileName,
-                                                    style: const TextStyle(
+                                                    isFallback
+                                                        ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
+                                                        : bestMatch.fileName,
+                                                    style: TextStyle(
                                                       fontSize: 11,
-                                                      color: AppTheme.emerald,
+                                                      color: isFallback
+                                                          ? AppTheme.amber
+                                                          : AppTheme.emerald,
                                                       fontWeight: FontWeight.w600,
                                                     ),
                                                   ),

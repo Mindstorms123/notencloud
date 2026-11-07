@@ -575,8 +575,10 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                       separatorBuilder: (ctx, i) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final song = _filteredSongs[index];
-                        final bestMatch =
-                            VoiceMatcher.findBestMatch(song.parts, widget.profile);
+                        final match =
+                            VoiceMatcher.findDetailedMatch(song.parts, widget.profile);
+                        final bestMatch = match?.part;
+                        final isFallback = match?.isFallback ?? false;
 
                         return Material(
                           color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
@@ -600,7 +602,9 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                     height: 44,
                                     decoration: BoxDecoration(
                                       color: bestMatch != null
-                                          ? AppTheme.emerald.withOpacity(0.12)
+                                          ? (isFallback
+                                              ? AppTheme.amber.withValues(alpha: 0.15)
+                                              : AppTheme.emerald.withValues(alpha: 0.12))
                                           : (isDark
                                               ? AppTheme.darkSurface
                                               : Colors.grey.shade100),
@@ -612,7 +616,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                             ? Icons.music_note_rounded
                                             : Icons.library_music_rounded,
                                         color: bestMatch != null
-                                            ? AppTheme.emerald
+                                            ? (isFallback ? AppTheme.amber : AppTheme.emerald)
                                             : (isDark
                                                 ? AppTheme.darkTextMuted
                                                 : Colors.grey.shade500),
@@ -647,26 +651,41 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                                 padding: const EdgeInsets.symmetric(
                                                     horizontal: 8, vertical: 3),
                                                 decoration: BoxDecoration(
-                                                  color: AppTheme.emerald.withOpacity(0.12),
+                                                  color: isFallback
+                                                      ? AppTheme.amber.withValues(alpha: 0.15)
+                                                      : AppTheme.emerald.withValues(alpha: 0.12),
                                                   borderRadius: BorderRadius.circular(6),
                                                   border: Border.all(
-                                                    color: AppTheme.emerald.withOpacity(0.3),
+                                                    color: isFallback
+                                                        ? AppTheme.amber.withValues(alpha: 0.4)
+                                                        : AppTheme.emerald.withValues(alpha: 0.3),
                                                   ),
                                                 ),
                                                 child: Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    const Icon(Icons.check_rounded,
-                                                        size: 12, color: AppTheme.emerald),
+                                                    Icon(
+                                                      isFallback
+                                                          ? Icons.info_outline_rounded
+                                                          : Icons.check_rounded,
+                                                      size: 12,
+                                                      color: isFallback
+                                                          ? AppTheme.amber
+                                                          : AppTheme.emerald,
+                                                    ),
                                                     const SizedBox(width: 4),
                                                     Flexible(
                                                       child: Text(
-                                                        bestMatch.fileName,
+                                                        isFallback
+                                                            ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
+                                                            : bestMatch.fileName,
                                                         maxLines: 1,
                                                         overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           fontSize: 11,
-                                                          color: AppTheme.emerald,
+                                                          color: isFallback
+                                                              ? AppTheme.amber
+                                                              : AppTheme.emerald,
                                                           fontWeight: FontWeight.bold,
                                                         ),
                                                       ),

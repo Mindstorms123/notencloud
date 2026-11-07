@@ -13,6 +13,30 @@ class MatchResult {
   });
 }
 
+enum MatchQuality {
+  exact, // Matches requested voice (or combined voice containing it)
+  fallback, // Requested voice does not exist; using available alternative
+}
+
+class DetailedMatch {
+  final PartFile part;
+  final MatchQuality quality;
+  final int requestedVoice;
+  final int actualVoice;
+  final String reason;
+
+  const DetailedMatch({
+    required this.part,
+    required this.quality,
+    required this.requestedVoice,
+    required this.actualVoice,
+    required this.reason,
+  });
+
+  bool get isExact => quality == MatchQuality.exact;
+  bool get isFallback => quality == MatchQuality.fallback;
+}
+
 class VoiceMatcher {
   /// Normalize a string for comparison (removes umlauts, punctuation, lowercase)
   static String normalize(String input) {
@@ -237,9 +261,8 @@ class VoiceMatcher {
     );
   }
 
-  /// Finds the best matching part file for a given song and profile.
-  /// Returns null if no compatible part for this instrument/voice exists.
-  static PartFile? findBestMatch(List<PartFile> parts, MusicianProfile profile) {
+  /// Finds the best matching part file with match quality details (exact vs fallback).
+  static DetailedMatch? findDetailedMatch(List<PartFile> parts, MusicianProfile profile) {
     if (parts.isEmpty) return null;
 
     final scored = parts
@@ -252,6 +275,25 @@ class VoiceMatcher {
     }
 
     scored.sort((a, b) => b.score.compareTo(a.score));
-    return scored.first.part;
+    final best = scored.first;
+
+    final isExact = profile.voiceNumber == 0 ||
+        best.part.detectedVoice == profile.voiceNumber ||
+        best.part.isCombinedVoice ||
+        best.part.detectedVoice == 0;
+
+    return DetailedMatch(
+      part: best.part,
+      quality: isExact ? MatchQuality.exact : MatchQuality.fallback,
+      requestedVoice: profile.voiceNumber,
+      actualVoice: best.part.detectedVoice,
+      reason: best.reason,
+    );
+  }
+
+  /// Finds the best matching part file for a given song and profile.
+  /// Returns null if no compatible part for this instrument/voice exists.
+  static PartFile? findBestMatch(List<PartFile> parts, MusicianProfile profile) {
+    return findDetailedMatch(parts, profile)?.part;
   }
 }

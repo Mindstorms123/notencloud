@@ -218,6 +218,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   Widget build(BuildContext context) {
     final currentAnn = _pageAnnotations[_currentPage] ?? PageAnnotations(pageIndex: _currentPage);
     final inSetlistMode = widget.currentSetlist != null;
+    final isExactVoice = widget.profile.voiceNumber == 0 ||
+        _currentPart.detectedVoice == widget.profile.voiceNumber ||
+        _currentPart.isCombinedVoice ||
+        _currentPart.detectedVoice == 0;
+    final voiceColor = isExactVoice ? AppTheme.emerald : AppTheme.amber;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -258,21 +263,27 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                         Container(
                           width: 7,
                           height: 7,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.emerald,
+                          decoration: BoxDecoration(
+                            color: voiceColor,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            _currentPart.fileName,
+                            isExactVoice
+                                ? _currentPart.fileName
+                                : 'Keine ${widget.profile.voiceNumber}. Stimme • Ausweichstimme: ${_currentPart.fileName}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: AppTheme.emerald, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: voiceColor,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        const Icon(Icons.arrow_drop_down, color: AppTheme.emerald, size: 16),
+                        Icon(Icons.arrow_drop_down, color: voiceColor, size: 16),
                       ],
                     ),
                   ),
