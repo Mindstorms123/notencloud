@@ -49,8 +49,18 @@ class NextcloudService {
   }
 
   /// Helper to list items in a WebDAV folder
-  Future<List<_DavItem>> _listFolder(String folderHref) async {
-    final url = Uri.parse('${account.cleanServerUrl}$folderHref');
+  Future<List<_DavItem>> _listFolder(String folderPath) async {
+    final String fullUrl;
+    if (folderPath.startsWith('http://') || folderPath.startsWith('https://')) {
+      fullUrl = folderPath;
+    } else if (folderPath.startsWith('/remote.php/dav/files/')) {
+      fullUrl = '${account.cleanServerUrl}$folderPath';
+    } else {
+      final clean = folderPath.startsWith('/') ? folderPath : '/$folderPath';
+      fullUrl = '${account.webDavBaseUrl}$clean';
+    }
+    final url = Uri.parse(fullUrl);
+
     final request = http.Request('PROPFIND', url)
       ..headers.addAll(_headers)
       ..headers['Depth'] = '1';
@@ -66,7 +76,7 @@ class NextcloudService {
         ? document.findAllElements('d:response')
         : document.findAllElements('D:response');
 
-    final cleanFolderHref = folderHref.endsWith('/') ? folderHref : '$folderHref/';
+    final requestPath = url.path.endsWith('/') ? url.path : '${url.path}/';
 
     for (final res in responses) {
       final hrefEl = res.findElements('d:href').isNotEmpty
@@ -77,7 +87,7 @@ class NextcloudService {
       final href = Uri.decodeFull(hrefEl.innerText);
       final normalizedHref = href.endsWith('/') ? href : '$href/';
       // Skip the folder itself
-      if (normalizedHref == cleanFolderHref) continue;
+      if (normalizedHref == requestPath) continue;
 
       final isCollection = res.findAllElements('d:collection').isNotEmpty ||
           res.findAllElements('D:collection').isNotEmpty;
@@ -106,10 +116,14 @@ class NextcloudService {
 
   /// Scan the root sheet music folder and retrieve all songs with their parts,
   /// traversing both category folders (e.g. "01_Aktuelle Noten") and instrument subfolders.
-  Future<List<Song>> scanLibrary() async {
+  Future<List<Song>> scanLibrary({Function(int current, int total)? onProgress}) async {
     final rootFolder = account.cleanRootFolder;
     final rootItems = await _listFolder(rootFolder);
     final List<Song> songs = [];
+
+    // Collect all song folders to scan across categories
+    final List<({String songId, String title, String folderName, String href, String category})>
+        songDirsToScan = [];
 
     for (final item in rootItems) {
       if (item.name.startsWith('.') || item.name == '_Setlisten') continue;
@@ -123,29 +137,22 @@ class NextcloudService {
             .where((i) => !i.isCollection && i.name.toLowerCase().endsWith('.pdf'))
             .toList();
 
-        // Case A: Category folder containing songs (e.g. "01_Aktuelle Noten" -> "Under Pressure", "September"...)
-        if (subDirs.isNotEmpty) {
-          for (final songDir in subDirs) {
-            if (songDir.name.startsWith('.')) continue;
-            final songId = '${item.name}_${songDir.name}';
-            final songTitle = Song.cleanTitleFromFolder(songDir.name);
+        // Category folder containing songs
+        for (final songDir in subDirs) {
+          if (songDir.name.startsWith('.')) continue;
+          final songId = '${item.name}_${songDir.name}';
+          final songTitle = Song.cleanTitleFromFolder(songDir.name);
 
-            final parts = await _scanSongFolderDeep(songDir.href, songId);
-            if (parts.isNotEmpty) {
-              songs.add(Song(
-                id: songId,
-                title: songTitle,
-                folderName: songDir.name,
-                remoteFolderPath: songDir.href,
-                category: categoryName,
-                parts: parts,
-                lastSynced: DateTime.now(),
-              ));
-            }
-          }
+          songDirsToScan.add((
+            songId: songId,
+            title: songTitle,
+            folderName: songDir.name,
+            href: songDir.href,
+            category: categoryName,
+          ));
         }
 
-        // Case B: Loose PDFs directly in folder (e.g. "03_Unsortiert" or single songs)
+        // Loose PDFs directly in folder (e.g. "03_Unsortiert")
         if (pdfs.isNotEmpty) {
           if (subDirs.isEmpty) {
             final songId = item.name;
@@ -183,41 +190,105 @@ class NextcloudService {
       }
     }
 
+    // Now scan all song folders with Depth: infinity in concurrent batches of 8
+    final total = songDirsToScan.length;
+    int processed = 0;
+    const batchSize = 8;
+
+    for (int i = 0; i < songDirsToScan.length; i += batchSize) {
+      final end = (i + batchSize < songDirsToScan.length) ? i + batchSize : songDirsToScan.length;
+      final batch = songDirsToScan.sublist(i, end);
+
+      final batchResults = await Future.wait(
+        batch.map((s) async {
+          final parts = await _scanSongFolder(s.href, s.songId);
+          return Song(
+            id: s.songId,
+            title: s.title,
+            folderName: s.folderName,
+            remoteFolderPath: s.href,
+            category: s.category,
+            parts: parts,
+            lastSynced: DateTime.now(),
+          );
+        }),
+      );
+
+      songs.addAll(batchResults.where((s) => s.parts.isNotEmpty));
+      processed += batch.length;
+      if (onProgress != null) {
+        onProgress(processed, total);
+      }
+    }
+
     songs.sort((a, b) => a.title.compareTo(b.title));
     return songs;
   }
 
-  /// Scans all parts in a song folder, including instrument subfolders (e.g. "Trumpet/1. Trumpet.pdf")
-  Future<List<PartFile>> _scanSongFolderDeep(String songFolderHref, String songId) async {
+  /// Scans all parts in a song folder using Depth: infinity for maximum speed
+  Future<List<PartFile>> _scanSongFolder(String songFolderHref, String songId) async {
+    final url = Uri.parse('${account.cleanServerUrl}$songFolderHref');
+    final request = http.Request('PROPFIND', url)
+      ..headers.addAll(_headers)
+      ..headers['Depth'] = 'infinity';
+
+    http.StreamedResponse response;
+    try {
+      response = await _client.send(request);
+    } catch (_) {
+      return [];
+    }
+
+    if (response.statusCode != 207) {
+      return [];
+    }
+
+    final body = await response.stream.bytesToString();
+    final document = xml.XmlDocument.parse(body);
+
     final List<PartFile> parts = [];
-    final items = await _listFolder(songFolderHref);
+    final responses = document.findAllElements('d:response').isNotEmpty
+        ? document.findAllElements('d:response')
+        : document.findAllElements('D:response');
 
-    for (final item in items) {
-      if (item.name.startsWith('.')) continue;
+    final cleanSongHref = songFolderHref.endsWith('/') ? songFolderHref : '$songFolderHref/';
 
-      if (!item.isCollection) {
-        // Direct PDF in song folder (e.g. "Partitur.pdf", "Alle-Stimmen.pdf")
-        if (item.name.toLowerCase().endsWith('.pdf')) {
-          final part = VoiceMatcher.parsePartFileName(item.name, songId, item.href);
-          parts.add(part.copyWith(fileSizeBytes: item.size));
-        }
-      } else {
-        // Instrument subfolder (e.g. "Trumpet/", "Trombone/", "Flute/")
-        final instrumentHint = item.name;
-        final subFiles = await _listFolder(item.href);
+    for (final res in responses) {
+      final hrefEl = res.findElements('d:href').isNotEmpty
+          ? res.findElements('d:href').first
+          : res.findElements('D:href').firstOrNull;
+      if (hrefEl == null) continue;
 
-        for (final subFile in subFiles) {
-          if (!subFile.isCollection && subFile.name.toLowerCase().endsWith('.pdf')) {
-            final part = VoiceMatcher.parsePartFileName(
-              subFile.name,
-              songId,
-              subFile.href,
-              instrumentHint: instrumentHint,
-            );
-            parts.add(part.copyWith(fileSizeBytes: subFile.size));
-          }
+      final href = Uri.decodeFull(hrefEl.innerText);
+      if (href.endsWith('/') || !href.toLowerCase().endsWith('.pdf')) continue;
+
+      final segments = href.split('/').where((s) => s.isNotEmpty).toList();
+      final fileName = segments.last;
+
+      String instrumentHint = '';
+      if (segments.length >= 2) {
+        final parentSegment = segments[segments.length - 2];
+        if (!cleanSongHref.contains('/$parentSegment/')) {
+          instrumentHint = parentSegment;
         }
       }
+
+      int size = 0;
+      final lengthEl = res.findAllElements('d:getcontentlength').isNotEmpty
+          ? res.findAllElements('d:getcontentlength').first
+          : res.findAllElements('D:getcontentlength').firstOrNull;
+      if (lengthEl != null) {
+        size = int.tryParse(lengthEl.innerText) ?? 0;
+      }
+
+      final part = VoiceMatcher.parsePartFileName(
+        fileName,
+        songId,
+        href,
+        instrumentHint: instrumentHint,
+      );
+
+      parts.add(part.copyWith(fileSizeBytes: size));
     }
 
     parts.sort((a, b) => a.fileName.compareTo(b.fileName));

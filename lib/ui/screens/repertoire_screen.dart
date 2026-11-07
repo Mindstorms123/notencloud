@@ -85,17 +85,26 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
 
     setState(() {
       _isSyncing = true;
-      _syncMessage = 'Synchronisiere Notenarchiv...';
+      _syncMessage = 'Scanne Notenarchiv...';
     });
 
     try {
-      final remoteSongs = await widget.nextcloudService!.scanLibrary();
+      final remoteSongs = await widget.nextcloudService!.scanLibrary(
+        onProgress: (current, total) {
+          if (mounted) {
+            setState(() {
+              _syncMessage = 'Lade Stücke: $current / $total...';
+            });
+          }
+        },
+      );
       await widget.storageService.saveCachedSongs(remoteSongs);
 
       setState(() {
         _allSongs = remoteSongs;
         _onSearchChanged();
         _isSyncing = false;
+        _syncMessage = null;
       });
 
       if (mounted) {
@@ -263,6 +272,31 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
               ],
             ),
           ),
+
+          // Live Sync Progress Bar
+          if (_isSyncing)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: Colors.amber.shade50,
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _syncMessage ?? 'Synchronisiere...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Category Filter Chips
           if (_categories.length > 2)
