@@ -444,5 +444,86 @@ void main() {
       expect(find.textContaining('Sortierung:'), findsOneWidget);
       expect(find.text('Incomplete Polka'), findsOneWidget);
     });
+
+    testWidgets('renders cleanly in landscape orientation and with virtual keyboard without overflow', (tester) async {
+      final storageService = await StorageService.init();
+
+      final completeSong = createSampleSong(
+        title: 'Complete Rock Song',
+        category: 'Rock',
+        fileNames: [
+          'Partitur.pdf',
+          'Flöte 1 in C.pdf',
+          'Flöte 2 in C.pdf',
+          'Klarinette 1 in Bb.pdf',
+          'Klarinette 2 in Bb.pdf',
+          'Altsaxophon 1 in Eb.pdf',
+          'Altsaxophon 2 in Eb.pdf',
+          'Tenorsaxophon 1 in Bb.pdf',
+          'Trompete 1 in Bb.pdf',
+          'Trompete 2 in Bb.pdf',
+          'Flügelhorn 1 in Bb.pdf',
+          'Waldhorn 1 in F.pdf',
+          'Waldhorn 2 in F.pdf',
+          'Tenorhorn 1 in Bb.pdf',
+          'Bariton in C.pdf',
+          'Posaune 1 in C.pdf',
+          'Posaune 2 in C.pdf',
+          'Tuba 1 in C.pdf',
+          'Percussion.pdf',
+        ],
+      );
+
+      final incompleteSong = createSampleSong(
+        title: 'Incomplete Polka',
+        category: 'Polka',
+        fileNames: ['Trompete 1 in Bb.pdf'],
+      );
+
+      // Set screen size to Landscape (e.g. 800 x 360)
+      tester.view.physicalSize = const Size(800 * 2.0, 360 * 2.0);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetViewInsets();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DigitizationAuditScreen(
+            allSongs: [completeSong, incompleteSong],
+            storageService: storageService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // No overflow in landscape
+      expect(tester.takeException(), isNull);
+      expect(find.text('Digitalisierungs-Check'), findsOneWidget);
+      expect(find.text('Gesamt-Digitalisierungsscore'), findsOneWidget);
+
+      // Now simulate keyboard appearing (bottom inset of 180 logical pixels)
+      tester.view.viewInsets = const FakeViewPadding(bottom: 180 * 2.0);
+      await tester.pumpAndSettle();
+
+      // Tap on search field
+      await tester.enterText(find.byType(TextField), 'Rock');
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(find.text('Complete Rock Song'), findsOneWidget);
+      expect(find.text('Incomplete Polka'), findsNothing);
+
+      // Open export modal while in landscape
+      await tester.tap(find.byIcon(Icons.share_rounded));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Digitalisierungs-Liste exportieren'), findsOneWidget);
+    });
   });
 }

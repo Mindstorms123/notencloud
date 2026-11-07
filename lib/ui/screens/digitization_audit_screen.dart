@@ -308,71 +308,76 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   void _showExportModal() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.darkSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Digitalisierungs-Liste exportieren',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${_filteredReports.where((r) => !r.isComplete).length} unvollständige Stücke teilen',
-                style: const TextStyle(fontSize: 13, color: AppTheme.darkTextMuted),
-              ),
-              const SizedBox(height: 18),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.rose.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                    ),
                   ),
-                  child: const Icon(Icons.picture_as_pdf_rounded, color: AppTheme.rose),
-                ),
-                title: const Text('Als druckfertige PDF exportieren', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                subtitle: const Text('Übersichtliche Tabelle zum Ausdrucken & Notenarchiv-Abhaken', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _exportPdf();
-                },
-              ),
-              const Divider(color: AppTheme.darkBorder),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.emerald.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Digitalisierungs-Liste exportieren',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
-                  child: const Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.emerald),
-                ),
-                title: const Text('Als Text / WhatsApp-Nachricht teilen', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                subtitle: const Text('Kompakte Liste für die Musiker-Gruppe', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _shareText();
-                },
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_filteredReports.where((r) => !r.isComplete).length} unvollständige Stücke teilen',
+                    style: const TextStyle(fontSize: 13, color: AppTheme.darkTextMuted),
+                  ),
+                  const SizedBox(height: 18),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.rose.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.picture_as_pdf_rounded, color: AppTheme.rose),
+                    ),
+                    title: const Text('Als druckfertige PDF exportieren', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    subtitle: const Text('Übersichtliche Tabelle zum Ausdrucken & Notenarchiv-Abhaken', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _exportPdf();
+                    },
+                  ),
+                  const Divider(color: AppTheme.darkBorder),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.emerald.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.emerald),
+                    ),
+                    title: const Text('Als Text / WhatsApp-Nachricht teilen', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    subtitle: const Text('Kompakte Liste für die Musiker-Gruppe', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _shareText();
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },
@@ -380,6 +385,8 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   }
 
   void _showSongDetailsModal(SongDigitizationReport r) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -388,12 +395,13 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.65,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
+        return SafeArea(
+          child: DraggableScrollableSheet(
+            initialChildSize: isLandscape ? 0.85 : 0.65,
+            minChildSize: isLandscape ? 0.45 : 0.4,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (context, scrollController) {
             return Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               child: ListView(
@@ -761,14 +769,16 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
               ),
             );
           },
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredReports;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
@@ -820,517 +830,581 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_isSyncing) ...[
-            const LinearProgressIndicator(
-              minHeight: 2,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation(AppTheme.primaryLight),
+      body: RefreshIndicator(
+        onRefresh: _syncWithCloud,
+        color: AppTheme.primaryLight,
+        backgroundColor: AppTheme.darkSurface,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          slivers: [
+            if (_isSyncing)
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    const LinearProgressIndicator(
+                      minHeight: 2,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation(AppTheme.primaryLight),
+                    ),
+                    if (_syncMessage != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                        color: AppTheme.primaryLight.withValues(alpha: 0.15),
+                        child: Text(
+                          _syncMessage!,
+                          style: const TextStyle(fontSize: 11, color: AppTheme.primaryLight, fontWeight: FontWeight.w500),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+            // Header Section: Stats, Modes, Priorities, Search & Filters
+            SliverToBoxAdapter(
+              child: _buildHeaderControls(isLandscape),
             ),
-            if (_syncMessage != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-                color: AppTheme.primaryLight.withValues(alpha: 0.15),
-                child: Text(
-                  _syncMessage!,
-                  style: const TextStyle(fontSize: 11, color: AppTheme.primaryLight, fontWeight: FontWeight.w500),
-                  textAlign: TextAlign.center,
+
+            // Empty state or Songs List
+            if (filtered.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_outline_rounded, color: AppTheme.emerald, size: 48),
+                        const SizedBox(height: 12),
+                        Text(
+                          _statusFilter == AuditStatusFilter.incomplete
+                              ? 'Keine fehlenden Noten in dieser Auswahl gefunden!'
+                              : (_statusFilter == AuditStatusFilter.complete
+                                  ? 'Keine vollständig digitalisierten Stücke in dieser Auswahl.'
+                                  : 'Keine Stücke gefunden.'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppTheme.darkTextSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+                sliver: SliverList.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, index) {
+                    final r = filtered[index];
+                    return _buildSongAuditCard(r);
+                  },
                 ),
               ),
           ],
-          // 1. Overall Score & Stats Card
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderControls(bool isLandscape) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Overall Score & Stats Card
+        _buildStatsSection(isLandscape),
+
+        // 2. Mode Selector Chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            children: [
+              ChoiceChip(
+                selected: _mode == AuditMode.smartBesetzung,
+                label: const Text('Smart-Besetzung (Auto)'),
+                onSelected: (sel) {
+                  if (sel) {
+                    setState(() {
+                      _mode = AuditMode.smartBesetzung;
+                      _recomputeReports();
+                    });
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                selected: _mode == AuditMode.standardBesetzung,
+                label: const Text('Klassisch (18 Kernstimmen)'),
+                onSelected: (sel) {
+                  if (sel) {
+                    setState(() {
+                      _mode = AuditMode.standardBesetzung;
+                      _recomputeReports();
+                    });
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                selected: _mode == AuditMode.vollbesetzung,
+                label: const Text('Großes Blasorchester'),
+                onSelected: (sel) {
+                  if (sel) {
+                    setState(() {
+                      _mode = AuditMode.vollbesetzung;
+                      _recomputeReports();
+                    });
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                selected: _mode == AuditMode.registerLuecken,
+                label: const Text('Nur Register-Lücken'),
+                onSelected: (sel) {
+                  if (sel) {
+                    setState(() {
+                      _mode = AuditMode.registerLuecken;
+                      _recomputeReports();
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+
+        // 2.5 Priority Recommendations Carousel ("Nächste Digitalisierungs-Ziele")
+        if (_summary.priorities.isNotEmpty) _buildPriorityCarousel(),
+
+        // 3. Search Bar, Sort & Category/Instrument Filters
+        _buildSearchAndFilters(isLandscape),
+      ],
+    );
+  }
+
+  Widget _buildScoreCard() {
+    final pct = _summary.overallPercentage;
+    final color = pct >= 80 ? AppTheme.emerald : (pct >= 50 ? AppTheme.amber : AppTheme.rose);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.darkBorder),
+      ),
+      child: Row(
+        children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-            decoration: const BoxDecoration(
-              color: AppTheme.darkSurface,
-              border: Border(bottom: BorderSide(color: AppTheme.darkBorder)),
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
-              children: [
-                // Prominent Overall Digitization Score Card
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkCard,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.darkBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: (_summary.overallPercentage >= 80
-                                  ? AppTheme.emerald
-                                  : (_summary.overallPercentage >= 50
-                                      ? AppTheme.amber
-                                      : AppTheme.rose))
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.pie_chart_rounded,
-                          size: 20,
-                          color: _summary.overallPercentage >= 80
-                              ? AppTheme.emerald
-                              : (_summary.overallPercentage >= 50
-                                  ? AppTheme.amber
-                                  : AppTheme.rose),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Gesamt-Digitalisierungsscore',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  '${_summary.overallPercentage.toStringAsFixed(1)}%',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: _summary.overallPercentage >= 80
-                                        ? AppTheme.emerald
-                                        : (_summary.overallPercentage >= 50
-                                            ? AppTheme.amber
-                                            : AppTheme.rose),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 5),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(3),
-                              child: LinearProgressIndicator(
-                                value: (_summary.overallPercentage / 100.0).clamp(0.0, 1.0),
-                                backgroundColor: Colors.white.withValues(alpha: 0.08),
-                                valueColor: AlwaysStoppedAnimation(
-                                  _summary.overallPercentage >= 80
-                                      ? AppTheme.emerald
-                                      : (_summary.overallPercentage >= 50
-                                          ? AppTheme.amber
-                                          : AppTheme.rose),
-                                ),
-                                minHeight: 6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white,
-                        isSelected: _statusFilter == AuditStatusFilter.all,
-                        onTap: () => setState(() => _statusFilter = AuditStatusFilter.all)),
-                    _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald,
-                        isSelected: _statusFilter == AuditStatusFilter.complete,
-                        onTap: () => setState(() => _statusFilter = AuditStatusFilter.complete)),
-                    _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber,
-                        isSelected: _statusFilter == AuditStatusFilter.incomplete,
-                        onTap: () => setState(() => _statusFilter = AuditStatusFilter.incomplete)),
-                    _buildStatItem('Fehlt gesamt', '${_summary.totalMissingParts}', AppTheme.rose),
-                  ],
-                ),
-              ],
+            child: Icon(
+              Icons.pie_chart_rounded,
+              size: 20,
+              color: color,
             ),
           ),
-
-          // 2. Mode Selector Chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Row(
-              children: [
-                ChoiceChip(
-                  selected: _mode == AuditMode.smartBesetzung,
-                  label: const Text('Smart-Besetzung (Auto)'),
-                  onSelected: (sel) {
-                    if (sel) {
-                      setState(() {
-                        _mode = AuditMode.smartBesetzung;
-                        _recomputeReports();
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  selected: _mode == AuditMode.standardBesetzung,
-                  label: const Text('Klassisch (18 Kernstimmen)'),
-                  onSelected: (sel) {
-                    if (sel) {
-                      setState(() {
-                        _mode = AuditMode.standardBesetzung;
-                        _recomputeReports();
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  selected: _mode == AuditMode.vollbesetzung,
-                  label: const Text('Großes Blasorchester'),
-                  onSelected: (sel) {
-                    if (sel) {
-                      setState(() {
-                        _mode = AuditMode.vollbesetzung;
-                        _recomputeReports();
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  selected: _mode == AuditMode.registerLuecken,
-                  label: const Text('Nur Register-Lücken'),
-                  onSelected: (sel) {
-                    if (sel) {
-                      setState(() {
-                        _mode = AuditMode.registerLuecken;
-                        _recomputeReports();
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // 2.5 Priority Recommendations Carousel ("Nächste Digitalisierungs-Ziele")
-          if (_summary.priorities.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.primaryLight.withValues(alpha: 0.12),
-                      AppTheme.darkCard,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.auto_awesome_rounded, color: AppTheme.amber, size: 16),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Empfohlene nächste Digitalisierungs-Ziele',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const Spacer(),
-                        const Text(
-                          'Tippen zum Filtern',
-                          style: TextStyle(fontSize: 10, color: AppTheme.darkTextMuted),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 56,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _summary.priorities.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemBuilder: (context, idx) {
-                          final p = _summary.priorities[idx];
-                          final root = p.instrumentOrVoice.split(' ').first;
-                          final isSelected = _selectedInstrument == root;
-
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () {
-                              setState(() {
-                                if (isSelected) {
-                                  _selectedInstrument = 'Alle Instrumente';
-                                } else {
-                                  _selectedInstrument = _instrumentsWithMissingParts.contains(root)
-                                      ? root
-                                      : 'Alle Instrumente';
-                                }
-                              });
-                            },
-                            child: Container(
-                              width: 190,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? AppTheme.amber.withValues(alpha: 0.22)
-                                    : AppTheme.darkSurface,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isSelected ? AppTheme.amber : AppTheme.darkBorder,
-                                  width: isSelected ? 1.5 : 1.0,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        '#${idx + 1}',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.amber,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Expanded(
-                                        child: Text(
-                                          p.instrumentOrVoice,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Fehlt in ${p.missingCount} Stücken',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontSize: 10, color: AppTheme.rose),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${p.completionRate.round()}%',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: p.completionRate >= 50 ? AppTheme.amber : AppTheme.rose,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // 3. Search Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Stück, Verlag oder Stimme suchen...',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded, size: 16),
-                        onPressed: () => _searchController.clear(),
-                      )
-                    : null,
-              ),
-            ),
-          ),
-
-          // 3.5 Sort Dropdown Bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-            child: Container(
-              height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.darkBorder),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.sort_rounded, size: 18, color: AppTheme.primaryLight),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<AuditSortOption>(
-                        value: _sortOption,
-                        isExpanded: true,
-                        dropdownColor: AppTheme.darkCard,
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
-                        items: const [
-                          DropdownMenuItem(
-                            value: AuditSortOption.percentAsc,
-                            child: Text('Sortierung: % aufsteigend (Dringendste zuerst)'),
-                          ),
-                          DropdownMenuItem(
-                            value: AuditSortOption.percentDesc,
-                            child: Text('Sortierung: % absteigend (Fast fertige zuerst)'),
-                          ),
-                          DropdownMenuItem(
-                            value: AuditSortOption.nameAsc,
-                            child: Text('Sortierung: Name (A – Z)'),
-                          ),
-                          DropdownMenuItem(
-                            value: AuditSortOption.nameDesc,
-                            child: Text('Sortierung: Name (Z – A)'),
-                          ),
-                          DropdownMenuItem(
-                            value: AuditSortOption.missingDesc,
-                            child: Text('Sortierung: Meiste fehlende Stimmen'),
-                          ),
-                        ],
-                        onChanged: (opt) {
-                          if (opt != null) setState(() => _sortOption = opt);
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 4. Category & Instrument Dropdowns Row
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkCard,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.darkBorder),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedCategory,
-                        isExpanded: true,
-                        dropdownColor: AppTheme.darkCard,
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
-                        items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                        onChanged: (cat) {
-                          if (cat != null) setState(() => _selectedCategory = cat);
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Container(
-                    height: 38,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkCard,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.darkBorder),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedInstrument,
-                        isExpanded: true,
-                        dropdownColor: AppTheme.darkCard,
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
-                        items: _instrumentsWithMissingParts
-                            .map((i) => DropdownMenuItem(value: i, child: Text(i)))
-                            .toList(),
-                        onChanged: (inst) {
-                          if (inst != null) setState(() => _selectedInstrument = inst);
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 5. Results List
+          const SizedBox(width: 12),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _syncWithCloud,
-              color: AppTheme.primaryLight,
-              backgroundColor: AppTheme.darkSurface,
-              child: filtered.isEmpty
-                  ? ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: [
-                        SizedBox(
-                          height: 280,
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.check_circle_outline_rounded, color: AppTheme.emerald, size: 48),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _statusFilter == AuditStatusFilter.incomplete
-                                      ? 'Keine fehlenden Noten in dieser Auswahl gefunden!'
-                                      : (_statusFilter == AuditStatusFilter.complete
-                                          ? 'Keine vollständig digitalisierten Stücke in dieser Auswahl.'
-                                          : 'Keine Stücke gefunden.'),
-                                  style: const TextStyle(color: AppTheme.darkTextSecondary),
-                                ),
-                              ],
-                            ),
-                          ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Flexible(
+                      child: Text(
+                        'Gesamt-Digitalisierungsscore',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                      ],
-                    )
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
-                      itemCount: filtered.length,
-                      itemBuilder: (ctx, index) {
-                        final r = filtered[index];
-                        return _buildSongAuditCard(r);
-                      },
+                      ),
                     ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${pct.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: (pct / 100.0).clamp(0.0, 1.0),
+                    backgroundColor: Colors.white.withValues(alpha: 0.08),
+                    valueColor: AlwaysStoppedAnimation(color),
+                    minHeight: 6,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStatsSection(bool isLandscape) {
+    final statRow = Row(
+      children: [
+        _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white,
+            isSelected: _statusFilter == AuditStatusFilter.all,
+            onTap: () => setState(() => _statusFilter = AuditStatusFilter.all)),
+        _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald,
+            isSelected: _statusFilter == AuditStatusFilter.complete,
+            onTap: () => setState(() => _statusFilter = AuditStatusFilter.complete)),
+        _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber,
+            isSelected: _statusFilter == AuditStatusFilter.incomplete,
+            onTap: () => setState(() => _statusFilter = AuditStatusFilter.incomplete)),
+        _buildStatItem('Fehlt gesamt', '${_summary.totalMissingParts}', AppTheme.rose),
+      ],
+    );
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, isLandscape ? 8 : 12, 16, isLandscape ? 10 : 14),
+      decoration: const BoxDecoration(
+        color: AppTheme.darkSurface,
+        border: Border(bottom: BorderSide(color: AppTheme.darkBorder)),
+      ),
+      child: isLandscape
+          ? Row(
+              children: [
+                Expanded(flex: 5, child: _buildScoreCard()),
+                const SizedBox(width: 14),
+                Expanded(flex: 6, child: statRow),
+              ],
+            )
+          : Column(
+              children: [
+                _buildScoreCard(),
+                const SizedBox(height: 10),
+                statRow,
+              ],
+            ),
+    );
+  }
+
+  Widget _buildPriorityCarousel() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.primaryLight.withValues(alpha: 0.12),
+              AppTheme.darkCard,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.primaryLight.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, color: AppTheme.amber, size: 16),
+                const SizedBox(width: 6),
+                const Text(
+                  'Empfohlene nächste Digitalisierungs-Ziele',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const Spacer(),
+                const Text(
+                  'Tippen zum Filtern',
+                  style: TextStyle(fontSize: 10, color: AppTheme.darkTextMuted),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 56,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _summary.priorities.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, idx) {
+                  final p = _summary.priorities[idx];
+                  final root = p.instrumentOrVoice.split(' ').first;
+                  final isSelected = _selectedInstrument == root;
+
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      setState(() {
+                        if (isSelected) {
+                          _selectedInstrument = 'Alle Instrumente';
+                        } else {
+                          _selectedInstrument = _instrumentsWithMissingParts.contains(root)
+                              ? root
+                              : 'Alle Instrumente';
+                        }
+                      });
+                    },
+                    child: Container(
+                      width: 190,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? AppTheme.amber.withValues(alpha: 0.22)
+                            : AppTheme.darkSurface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? AppTheme.amber : AppTheme.darkBorder,
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                '#${idx + 1}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.amber,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  p.instrumentOrVoice,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Fehlt in ${p.missingCount} Stücken',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 10, color: AppTheme.rose),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${p.completionRate.round()}%',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: p.completionRate >= 50 ? AppTheme.amber : AppTheme.rose,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilters(bool isLandscape) {
+    final searchField = TextField(
+      controller: _searchController,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: 'Stück, Verlag oder Stimme suchen...',
+        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear_rounded, size: 16),
+                onPressed: () => _searchController.clear(),
+              )
+            : null,
+      ),
+    );
+
+    final sortDropdown = Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.darkBorder),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.sort_rounded, size: 18, color: AppTheme.primaryLight),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<AuditSortOption>(
+                value: _sortOption,
+                isExpanded: true,
+                dropdownColor: AppTheme.darkCard,
+                style: const TextStyle(fontSize: 12, color: Colors.white),
+                items: const [
+                  DropdownMenuItem(
+                    value: AuditSortOption.percentAsc,
+                    child: Text('Sortierung: % aufsteigend (Dringendste zuerst)', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: AuditSortOption.percentDesc,
+                    child: Text('Sortierung: % absteigend (Fast fertige zuerst)', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: AuditSortOption.nameAsc,
+                    child: Text('Sortierung: Name (A – Z)', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: AuditSortOption.nameDesc,
+                    child: Text('Sortierung: Name (Z – A)', overflow: TextOverflow.ellipsis),
+                  ),
+                  DropdownMenuItem(
+                    value: AuditSortOption.missingDesc,
+                    child: Text('Sortierung: Meiste fehlende Stimmen', overflow: TextOverflow.ellipsis),
+                  ),
+                ],
+                onChanged: (opt) {
+                  if (opt != null) setState(() => _sortOption = opt);
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final categoryDropdown = Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.darkBorder),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedCategory,
+          isExpanded: true,
+          dropdownColor: AppTheme.darkCard,
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+          items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+          onChanged: (cat) {
+            if (cat != null) setState(() => _selectedCategory = cat);
+          },
+        ),
+      ),
+    );
+
+    final instrumentDropdown = Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.darkBorder),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedInstrument,
+          isExpanded: true,
+          dropdownColor: AppTheme.darkCard,
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+          items: _instrumentsWithMissingParts
+              .map((i) => DropdownMenuItem(value: i, child: Text(i, overflow: TextOverflow.ellipsis)))
+              .toList(),
+          onChanged: (inst) {
+            if (inst != null) setState(() => _selectedInstrument = inst);
+          },
+        ),
+      ),
+    );
+
+    if (isLandscape) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(flex: 3, child: searchField),
+                const SizedBox(width: 10),
+                Expanded(flex: 2, child: sortDropdown),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(child: categoryDropdown),
+                const SizedBox(width: 10),
+                Expanded(child: instrumentDropdown),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: searchField,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+          child: sortDropdown,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Row(
+            children: [
+              Expanded(child: categoryDropdown),
+              const SizedBox(width: 10),
+              Expanded(child: instrumentDropdown),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
