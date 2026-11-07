@@ -7,7 +7,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
+import '../../models/pedal_settings.dart';
 import '../../services/nextcloud_service.dart';
+import '../../services/pedal_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/update_service.dart';
 import '../../services/voice_matcher.dart';
@@ -53,12 +55,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _updateError;
   String _installedVersion = '1.0.0';
 
+  // Bluetooth Foot Pedal State
+  late PedalSettings _pedalSettings;
+  List<ConnectedDevice> _connectedPedals = [];
+  bool _isLoadingPedals = false;
+  String? _pedalTesterFeedback;
+  Color? _pedalTesterColor;
+  bool _isLearningCustomNext = false;
+  bool _isLearningCustomPrev = false;
+  Timer? _pedalTesterTimer;
+
   @override
   void initState() {
     super.initState();
     _profile = widget.profile;
     _account = widget.storageService.getAccount();
     _defaultCategory = widget.storageService.getDefaultCategory();
+    _pedalSettings = widget.storageService.getPedalSettings();
+    _loadConnectedPedals();
+    HardwareKeyboard.instance.addHandler(_handlePedalTesterKeyEvent);
 
     _serverUrlController.text = _account.serverUrl;
     _usernameController.text = _account.username;
@@ -86,11 +101,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handlePedalTesterKeyEvent);
+    _pedalTesterTimer?.cancel();
     _serverUrlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     _rootFolderController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadConnectedPedals({bool showLoading = false}) async {
+    if (showLoading && mounted) {
+      setState(() => _isLoadingPedals = true);
+    }
+    try {
+      final list = await PedalService.getConnectedDevices();
+      if (mounted) {
+        setState(() {
+          _connectedPedals = list;
+          _isLoadingPedals = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingPedals = false);
+      }
+    }
+  }
+
+  bool _handlePedalTesterKeyEvent(KeyEvent event) {
+    if (!_pedalSettings.enabled) return false;
+    if (event is! KeyDownEvent) return false;
+
+    if (_isLearningCustomNext) {
+      final updated = _pedalSettings.copyWith(
+        customNextKeyId: event.logicalKey.keyId,
+        customNextKeyLabel: event.logicalKey.keyLabel,
+      );
+      setState(() {
+        _isLearningCustomNext = false;
+        _pedalSettings = updated;
+        _setTesterFeedback('Nächste Seite belegt mit: ${event.logicalKey.keyLabel}', AppTheme.emerald);
+      });
+      widget.storageService.savePedalSettings(updated);
+      return true;
+    }
+
+    if (_isLearningCustomPrev) {
+      final updated = _pedalSettings.copyWith(
+        customPrevKeyId: event.logicalKey.keyId,
+        customPrevKeyLabel: event.logicalKey.keyLabel,
+      );
+      setState(() {
+        _isLearningCustomPrev = false;
+        _pedalSettings = updated;
+        _setTesterFeedback('Vorherige Seite belegt mit: ${event.logicalKey.keyLabel}', AppTheme.primaryLight);
+      });
+      widget.storageService.savePedalSettings(updated);
+      return true;
+    }
+
+    if (_pedalSettings.isNextKey(event.logicalKey)) {
+      _setTesterFeedback('NÄCHSTE SEITE (${event.logicalKey.keyLabel})', AppTheme.emerald);
+    } else if (_pedalSettings.isPrevKey(event.logicalKey)) {
+      _setTesterFeedback('VORHERIGE SEITE (${event.logicalKey.keyLabel})', AppTheme.primaryLight);
+    } else {
+      _setTesterFeedback('Taste empfangen: ${event.logicalKey.keyLabel} (nicht belegt)', AppTheme.amber);
+    }
+    return false;
+  }
+
+  void _setTesterFeedback(String text, Color color) {
+    _pedalTesterTimer?.cancel();
+    setState(() {
+      _pedalTesterFeedback = text;
+      _pedalTesterColor = color;
+    });
+    _pedalTesterTimer = Timer(const Duration(milliseconds: 2200), () {
+      if (mounted) {
+        setState(() {
+          _pedalTesterFeedback = null;
+        });
+      }
+    });
+  }
+
+  void _updatePedalSettings(PedalSettings updated) {
+    setState(() {
+      _pedalSettings = updated;
+    });
+    widget.storageService.savePedalSettings(updated);
   }
 
   Future<void> _saveProfile() async {
@@ -738,7 +838,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Section 2: Nextcloud Account
+          // Section 2: Bluetooth Foot Pedal (Page Turner)
+          _buildPedalSettingsCard(isDark),
+          const SizedBox(height: 16),
+
+          // Section 3: Nextcloud Account
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -1298,6 +1402,389 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPedalSettingsCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.emerald.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.settings_remote_rounded, color: AppTheme.emerald, size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bluetooth Fußpedal (Page Turner)',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Kabelloses Umblättern für PageFlip, AirTurn, Donner u.v.m.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _pedalSettings.enabled,
+                activeThumbColor: AppTheme.emerald,
+                onChanged: (val) {
+                  _updatePedalSettings(_pedalSettings.copyWith(enabled: val));
+                },
+              ),
+            ],
+          ),
+
+          if (_pedalSettings.enabled) ...[
+            const SizedBox(height: 16),
+            const Divider(color: AppTheme.darkBorder, height: 1),
+            const SizedBox(height: 16),
+
+            // 1. Geräteauswahl & Status
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'ERKANNTES GERÄT',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.darkTextMuted,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                if (_isLoadingPedals)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryLight),
+                  )
+                else
+                  InkWell(
+                    onTap: () => _loadConnectedPedals(showLoading: true),
+                    borderRadius: BorderRadius.circular(6),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Row(
+                        children: [
+                          Icon(Icons.refresh_rounded, size: 14, color: AppTheme.primaryLight),
+                          SizedBox(width: 4),
+                          Text('Aktualisieren', style: TextStyle(fontSize: 12, color: AppTheme.primaryLight)),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            if (_connectedPedals.isNotEmpty) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    selected: _pedalSettings.selectedDeviceName == null,
+                    label: const Text('Alle Pedale (Standard)'),
+                    onSelected: (sel) {
+                      if (sel) {
+                        _updatePedalSettings(_pedalSettings.copyWith(selectedDeviceName: null));
+                      }
+                    },
+                  ),
+                  ..._connectedPedals.map((dev) {
+                    final isSel = _pedalSettings.selectedDeviceName == dev.name;
+                    return ChoiceChip(
+                      selected: isSel,
+                      avatar: const Icon(Icons.bluetooth_connected_rounded, size: 16),
+                      label: Text(dev.name),
+                      selectedColor: AppTheme.emerald.withValues(alpha: 0.25),
+                      onSelected: (sel) {
+                        _updatePedalSettings(
+                          _pedalSettings.copyWith(selectedDeviceName: sel ? dev.name : null),
+                        );
+                      },
+                    );
+                  }),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.darkBorder),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.bluetooth_searching_rounded, color: AppTheme.darkTextMuted, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Kein externes Pedal erkannt. Kopple dein Fußpedal über die Bluetooth-Einstellungen deines Geräts.',
+                        style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Button to open system Bluetooth settings
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryLight,
+                side: BorderSide(color: AppTheme.primaryLight.withValues(alpha: 0.4)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.bluetooth_rounded, size: 18),
+              label: const Text('Bluetooth-Einstellungen des Geräts öffnen'),
+              onPressed: () => PedalService.openBluetoothSettings(),
+            ),
+
+            const SizedBox(height: 20),
+
+            // 2. Pedal-Modus (Tastenbelegung)
+            const Text(
+              'PEDAL-MODUS (TASTENBELEGUNG)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.darkTextMuted,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.darkBorder),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<PedalMode>(
+                  value: _pedalSettings.mode,
+                  isExpanded: true,
+                  dropdownColor: AppTheme.darkCard,
+                  items: const [
+                    DropdownMenuItem(
+                      value: PedalMode.universal,
+                      child: Text('Universal (Empfohlen: PageDown/Up, Pfeile, Leertaste)'),
+                    ),
+                    DropdownMenuItem(
+                      value: PedalMode.pageUpDown,
+                      child: Text('Bild ab / auf (PageDown / PageUp) - z.B. PageFlip Mode 1'),
+                    ),
+                    DropdownMenuItem(
+                      value: PedalMode.arrowKeys,
+                      child: Text('Pfeiltasten (Pfeil runter/hoch, rechts/links)'),
+                    ),
+                    DropdownMenuItem(
+                      value: PedalMode.spaceEnter,
+                      child: Text('Leertaste / Enter'),
+                    ),
+                    DropdownMenuItem(
+                      value: PedalMode.custom,
+                      child: Text('Benutzerdefiniert (Taste individuell anlernen)'),
+                    ),
+                  ],
+                  onChanged: (mode) {
+                    if (mode != null) {
+                      _updatePedalSettings(_pedalSettings.copyWith(mode: mode));
+                    }
+                  },
+                ),
+              ),
+            ),
+
+            // Custom Learning controls if custom mode
+            if (_pedalSettings.mode == PedalMode.custom) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: _isLearningCustomNext ? AppTheme.emerald.withValues(alpha: 0.2) : null,
+                        side: BorderSide(color: _isLearningCustomNext ? AppTheme.emerald : AppTheme.darkBorder),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isLearningCustomNext = true;
+                          _isLearningCustomPrev = false;
+                        });
+                      },
+                      child: Text(
+                        _isLearningCustomNext
+                            ? 'Trete jetzt...'
+                            : 'Weiter: ${_pedalSettings.customNextKeyLabel ?? 'Anlernen'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: _isLearningCustomPrev ? AppTheme.primary.withValues(alpha: 0.2) : null,
+                        side: BorderSide(color: _isLearningCustomPrev ? AppTheme.primary : AppTheme.darkBorder),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isLearningCustomPrev = true;
+                          _isLearningCustomNext = false;
+                        });
+                      },
+                      child: Text(
+                        _isLearningCustomPrev
+                            ? 'Trete jetzt...'
+                            : 'Zurück: ${_pedalSettings.customPrevKeyLabel ?? 'Anlernen'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 20),
+
+            // 3. Setlisten-Optionen
+            const Text(
+              'BÜHNEN-VERHALTEN IN SETLISTEN',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.darkTextMuted,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Am Ende des Stücks zum nächsten Stück weiterblättern',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Bei der letzten Seite eines Lieds öffnet der nächste Tritt sofort das nächste Stück der Setliste',
+                        style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _pedalSettings.setlistAutoAdvance,
+                  activeThumbColor: AppTheme.emerald,
+                  onChanged: (val) {
+                    _updatePedalSettings(_pedalSettings.copyWith(setlistAutoAdvance: val));
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Am Anfang des Stücks zum vorherigen Stück zurückblättern',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Auf Seite 1 springt ein Rückwärts-Tritt zum vorherigen Stück der Setliste',
+                        style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _pedalSettings.setlistAutoRewind,
+                  activeThumbColor: AppTheme.emerald,
+                  onChanged: (val) {
+                    _updatePedalSettings(_pedalSettings.copyWith(setlistAutoRewind: val));
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // 4. Interaktiver Live-Tester
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: _pedalTesterFeedback != null
+                    ? (_pedalTesterColor ?? AppTheme.emerald).withValues(alpha: 0.15)
+                    : Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _pedalTesterFeedback != null
+                      ? (_pedalTesterColor ?? AppTheme.emerald).withValues(alpha: 0.6)
+                      : AppTheme.darkBorder,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _pedalTesterFeedback != null ? Icons.check_circle_rounded : Icons.touch_app_rounded,
+                    color: _pedalTesterFeedback != null ? _pedalTesterColor : AppTheme.darkTextMuted,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _pedalTesterFeedback ?? 'Live-Test: Trete jetzt auf dein Pedal, um die Reaktion zu prüfen...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: _pedalTesterFeedback != null ? FontWeight.bold : FontWeight.normal,
+                        color: _pedalTesterFeedback != null ? Colors.white : AppTheme.darkTextMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

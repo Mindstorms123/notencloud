@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/musician_profile.dart';
 import '../models/nextcloud_account.dart';
+import '../models/pedal_settings.dart';
 import '../models/song.dart';
 import '../models/setlist.dart';
 import 'voice_matcher.dart';
@@ -16,6 +17,7 @@ class StorageService {
   static const _prefLocalSetlistsKey = 'local_setlists';
   static const _prefDefaultCategoryKey = 'default_repertoire_category';
   static const _prefLastActiveCategoryKey = 'last_active_repertoire_category';
+  static const _prefPedalSettingsKey = 'pedal_settings';
 
   final SharedPreferences _prefs;
 
@@ -179,5 +181,22 @@ class StorageService {
     final all = getLocalSetlists();
     all.removeWhere((s) => s.id == id);
     await saveLocalSetlists(all);
+  }
+
+  // --- Bluetooth Foot Pedal (Page Turner) ---
+
+  PedalSettings getPedalSettings() {
+    final jsonStr = _prefs.getString(_prefPedalSettingsKey);
+    if (jsonStr == null) return PedalSettings.defaultSettings();
+    try {
+      final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return PedalSettings.fromJson(map);
+    } catch (_) {
+      return PedalSettings.defaultSettings();
+    }
+  }
+
+  Future<void> savePedalSettings(PedalSettings settings) async {
+    await _prefs.setString(_prefPedalSettingsKey, jsonEncode(settings.toJson()));
   }
 }

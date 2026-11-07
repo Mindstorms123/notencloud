@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 import '../../models/annotation.dart';
 import '../../models/musician_profile.dart';
+import '../../models/pedal_settings.dart';
 import '../../models/song.dart';
 import '../../models/setlist.dart';
 import '../../services/annotation_service.dart';
@@ -67,6 +70,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   bool _isCloudSyncing = false;
   bool _isCloudSynced = false;
 
+  // Bluetooth Foot Pedal (Page Turner) state
+  late PedalSettings _pedalSettings;
+  String? _hudMessage;
+  Timer? _hudTimer;
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +82,226 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     _currentPart = widget.initialPart;
     _currentSetlistIndex = widget.setlistIndex;
     _pdfController = PdfViewerController();
+    _pedalSettings = widget.storageService.getPedalSettings();
+    HardwareKeyboard.instance.addHandler(_handlePedalKeyEvent);
     _preparePdf();
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handlePedalKeyEvent);
+    _hudTimer?.cancel();
+    super.dispose();
+  }
+
+  bool _handlePedalKeyEvent(KeyEvent event) {
+    if (!_pedalSettings.enabled) return false;
+    // Don't intercept typing when text annotation input is active
+    if (_isDrawingActive && _activeTool == StrokeType.text) return false;
+    if (event is! KeyDownEvent) return false;
+
+    if (_pedalSettings.isNextKey(event.logicalKey)) {
+      _pedalTurnPage(isNext: true);
+      return true;
+    } else if (_pedalSettings.isPrevKey(event.logicalKey)) {
+      _pedalTurnPage(isNext: false);
+      return true;
+    }
+    return false;
+  }
+
+  void _pedalTurnPage({required bool isNext}) {
+    if (isNext) {
+      if (_currentPage < _pageCount) {
+        final target = _currentPage + 1;
+        _goToPage(target);
+        _triggerHudFeedback('Seite $target / $_pageCount');
+      } else if (_currentPage >= _pageCount && _pedalSettings.setlistAutoAdvance && _hasNextInSetlist) {
+        _navigateToSetlistItem(_currentSetlistIndex + 1);
+        _triggerHudFeedback('Nächstes Stück');
+      } else {
+        _triggerHudFeedback('Ende des Stücks');
+      }
+    } else {
+      if (_currentPage > 1) {
+        final target = _currentPage - 1;
+        _goToPage(target);
+        _triggerHudFeedback('Seite $target / $_pageCount');
+      } else if (_currentPage <= 1 && _pedalSettings.setlistAutoRewind && _hasPrevInSetlist) {
+        _navigateToSetlistItem(_currentSetlistIndex - 1);
+        _triggerHudFeedback('Vorheriges Stück');
+      } else {
+        _triggerHudFeedback('Anfang des Stücks');
+      }
+    }
+  }
+
+  void _goToPage(int targetPage) {
+    if (_pdfController?.isReady == true && targetPage >= 1 && targetPage <= _pageCount) {
+      try {
+        _pdfController!.goToPage(pageNumber: targetPage);
+      } catch (_) {}
+      setState(() {
+        _currentPage = targetPage;
+      });
+      _loadPageAnnotations(targetPage);
+    }
+  }
+
+  void _triggerHudFeedback(String message) {
+    _hudTimer?.cancel();
+    setState(() {
+      _hudMessage = message;
+    });
+    _hudTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() {
+          _hudMessage = null;
+        });
+      }
+    });
+  }
+
+  void _showPedalQuickSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.darkSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.emerald.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.settings_remote_rounded, color: AppTheme.emerald, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Bluetooth Fußpedal',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            Text(
+                              'Kabelloses Umblättern für PageFlip, AirTurn uvm.',
+                              style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _pedalSettings.enabled,
+                        activeThumbColor: AppTheme.emerald,
+                        onChanged: (val) {
+                          final updated = _pedalSettings.copyWith(enabled: val);
+                          setState(() => _pedalSettings = updated);
+                          setSheetState(() {});
+                          widget.storageService.savePedalSettings(updated);
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(color: AppTheme.darkBorder, height: 28),
+                  if (_pedalSettings.enabled) ...[
+                    // Modus-Auswahl
+                    const Text('PEDAL-MODUS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.darkTextMuted, letterSpacing: 0.5)),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkCard,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.darkBorder),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<PedalMode>(
+                          value: _pedalSettings.mode,
+                          isExpanded: true,
+                          dropdownColor: AppTheme.darkCard,
+                          items: const [
+                            DropdownMenuItem(value: PedalMode.universal, child: Text('Universal (PageDown/Up, Pfeile, Space)')),
+                            DropdownMenuItem(value: PedalMode.pageUpDown, child: Text('Bild ab / auf (PageDown / PageUp)')),
+                            DropdownMenuItem(value: PedalMode.arrowKeys, child: Text('Pfeiltasten (Runter/Hoch, Rechts/Links)')),
+                            DropdownMenuItem(value: PedalMode.spaceEnter, child: Text('Leertaste / Enter')),
+                            DropdownMenuItem(value: PedalMode.custom, child: Text('Benutzerdefiniert')),
+                          ],
+                          onChanged: (mode) {
+                            if (mode != null) {
+                              final updated = _pedalSettings.copyWith(mode: mode);
+                              setState(() => _pedalSettings = updated);
+                              setSheetState(() {});
+                              widget.storageService.savePedalSettings(updated);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // Setlist Auto-Advance
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'In Setlisten zum nächsten Stück weiterblättern',
+                                style: TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w600),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Bei der letzten Seite öffnet der nächste Tritt das nächste Stück',
+                                style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: _pedalSettings.setlistAutoAdvance,
+                          activeThumbColor: AppTheme.emerald,
+                          onChanged: (val) {
+                            final updated = _pedalSettings.copyWith(setlistAutoAdvance: val);
+                            setState(() => _pedalSettings = updated);
+                            setSheetState(() {});
+                            widget.storageService.savePedalSettings(updated);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _zoomIn() {
@@ -453,6 +680,13 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                 ],
               ),
               actions: [
+                // Bluetooth foot pedal quick settings button
+                if (_pedalSettings.enabled)
+                  IconButton(
+                    icon: const Icon(Icons.settings_remote_rounded, color: AppTheme.emerald, size: 20),
+                    tooltip: 'Bluetooth-Fußpedal aktiv (${_pedalSettings.mode == PedalMode.universal ? "Universal" : _pedalSettings.mode.name})',
+                    onPressed: _showPedalQuickSheet,
+                  ),
                 // Voice selector button
                 IconButton(
                   icon: const Icon(Icons.queue_music_rounded, color: AppTheme.primaryLight),
@@ -827,6 +1061,46 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                   ),
                 ),
               ),
+
+          // Floating HUD Feedback (e.g. for foot pedal page turn)
+          if (_hudMessage != null)
+            Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF13151D).withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.6)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.settings_remote_rounded, color: AppTheme.emerald, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        _hudMessage!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
