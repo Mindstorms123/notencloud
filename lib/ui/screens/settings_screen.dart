@@ -460,7 +460,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // Dynamic Instrument selector
                 DropdownButtonFormField<String>(
-                  value: instrumentsList.contains(_profile.instrument)
+                  key: ValueKey('inst_${_profile.instrument}'),
+                  initialValue: instrumentsList.contains(_profile.instrument)
                       ? _profile.instrument
                       : instrumentsList.firstOrNull ?? 'Trompete',
                   decoration: InputDecoration(
@@ -486,7 +487,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // Voice number
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: _profile.voiceNumber,
+                        key: ValueKey('voice_${_profile.voiceNumber}'),
+                        initialValue: _profile.voiceNumber,
                         decoration: const InputDecoration(
                           labelText: 'Stimme',
                         ),
@@ -512,7 +514,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // Key / Transposition
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: MusicianProfile.standardKeys.contains(_profile.keyOrClef)
+                        key: ValueKey('key_${_profile.keyOrClef}'),
+                        initialValue: MusicianProfile.standardKeys.contains(_profile.keyOrClef)
                             ? _profile.keyOrClef
                             : 'Bb',
                         decoration: const InputDecoration(
@@ -537,7 +540,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 // Default Start Category / Folder
                 DropdownButtonFormField<String>(
-                  value: categoriesList.contains(_defaultCategory)
+                  key: ValueKey('cat_$_defaultCategory'),
+                  initialValue: categoriesList.contains(_defaultCategory)
                       ? _defaultCategory
                       : 'Aktuelle Noten',
                   decoration: const InputDecoration(
@@ -909,7 +913,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppTheme.amber.withOpacity(0.12),
+                        color: AppTheme.amber.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.lightbulb_rounded, color: AppTheme.amber, size: 20),

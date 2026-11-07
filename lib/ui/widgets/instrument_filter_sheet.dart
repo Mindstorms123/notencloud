@@ -301,7 +301,7 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
                 style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
               ),
               value: _onlyMyVoice,
-              activeColor: AppTheme.primaryLight,
+              activeThumbColor: AppTheme.primaryLight,
               onChanged: (val) => setState(() => _onlyMyVoice = val),
             ),
 

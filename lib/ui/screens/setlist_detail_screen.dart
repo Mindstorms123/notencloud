@@ -42,11 +42,8 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
     _setlist = widget.setlist;
   }
 
-  void _onReorder(int oldIndex, int newIndex) {
+  void _onReorderItem(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) {
-        newIndex -= 1;
-      }
       final items = List<SetlistItem>.from(_setlist.items);
       final item = items.removeAt(oldIndex);
       items.insert(newIndex, item);
@@ -570,7 +567,7 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                 : ReorderableListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: _setlist.items.length,
-                    onReorder: _onReorder,
+                    onReorderItem: _onReorderItem,
                     itemBuilder: (context, index) {
                       final item = _setlist.items[index];
 

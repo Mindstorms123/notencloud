@@ -50,7 +50,15 @@ class StorageService {
     final jsonStr = _prefs.getString(_prefProfileKey);
     if (jsonStr == null) return MusicianProfile.defaultProfile();
     try {
-      return MusicianProfile.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+      final profile = MusicianProfile.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+      if (profile.instrument == 'Schlagzeug' ||
+          profile.instrument == 'Pauken' ||
+          profile.instrument == 'Glockenspiel') {
+        final migrated = profile.copyWith(instrument: 'Percussion');
+        saveProfile(migrated);
+        return migrated;
+      }
+      return profile;
     } catch (_) {
       return MusicianProfile.defaultProfile();
     }
@@ -112,13 +120,16 @@ class StorageService {
       final songs = list.map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
       return songs.map((song) {
         final sanitizedParts = song.parts.map((p) {
-          final inst = p.detectedInstrument.trim();
+          var inst = p.detectedInstrument.trim();
+          if (inst == 'Schlagzeug' || inst == 'Pauken' || inst == 'Glockenspiel') {
+            inst = 'Percussion';
+          }
           if (VoiceMatcher.knownRealInstruments.contains(inst) ||
               inst == 'Partitur' ||
               inst == 'Direktion' ||
               inst == 'Zusatzstimme' ||
               inst == 'Dokument') {
-            return p;
+            return p.copyWith(detectedInstrument: inst);
           }
           // Legacy/bogus instrument name (e.g. "Wonderful Christmas") -> sanitize to Zusatzstimme
           return p.copyWith(detectedInstrument: 'Zusatzstimme');

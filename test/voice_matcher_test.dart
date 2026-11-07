@@ -36,6 +36,22 @@ void main() {
       final part = VoiceMatcher.parsePartFileName('01_Partitur.pdf', 'song1', '/path');
       expect(part.detectedInstrument.toLowerCase(), contains('partitur'));
     });
+
+    test('consolidates all drums, timpani, and mallets/mellods to Percussion', () {
+      final drumPart = VoiceMatcher.parsePartFileName('Schlagzeug.pdf', 's1', '/p1');
+      final malletPart = VoiceMatcher.parsePartFileName('Song - Mallets.pdf', 's1', '/p2');
+      final mellodPart = VoiceMatcher.parsePartFileName('Mellods_1.pdf', 's1', '/p3');
+      final paukenPart = VoiceMatcher.parsePartFileName('Pauken.pdf', 's1', '/p4');
+      final glspPart = VoiceMatcher.parsePartFileName('Glockenspiel.pdf', 's1', '/p5');
+      final percPart = VoiceMatcher.parsePartFileName('Percussion.pdf', 's1', '/p6');
+
+      expect(drumPart.detectedInstrument, 'Percussion');
+      expect(malletPart.detectedInstrument, 'Percussion');
+      expect(mellodPart.detectedInstrument, 'Percussion');
+      expect(paukenPart.detectedInstrument, 'Percussion');
+      expect(glspPart.detectedInstrument, 'Percussion');
+      expect(percPart.detectedInstrument, 'Percussion');
+    });
   });
 
   group('VoiceMatcher scoring and best match', () {
@@ -68,6 +84,20 @@ void main() {
       final best = VoiceMatcher.findBestMatch(listWithCombined, profileTrompete1);
       expect(best, isNotNull);
       expect(best!.fileName, 'Trompete_1-2_Bb.pdf');
+    });
+
+    test('finds percussion match for drums / mallets / timpani part with Percussion profile', () {
+      const profilePercussion = MusicianProfile(
+        instrument: 'Percussion',
+        voiceNumber: 1,
+      );
+      final percussionParts = [
+        VoiceMatcher.parsePartFileName('Flöte_1.pdf', 'song3', '/p1'),
+        VoiceMatcher.parsePartFileName('Schlagzeug.pdf', 'song3', '/p2'),
+      ];
+      final best = VoiceMatcher.findBestMatch(percussionParts, profilePercussion);
+      expect(best, isNotNull);
+      expect(best!.fileName, 'Schlagzeug.pdf');
     });
   });
 }
