@@ -103,13 +103,13 @@ void main() {
     test('detects specific percussion sub-instruments correctly', () {
       expect(VoiceMatcher.detectPercussionSubInstrument('Schlagzeug.pdf'), 'Schlagzeug');
       expect(VoiceMatcher.detectPercussionSubInstrument('Song - Drums.pdf'), 'Schlagzeug');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Percussion_1.pdf'), 'Schlagzeug');
+      expect(VoiceMatcher.detectPercussionSubInstrument('Becken_Triangel.pdf'), 'Schlagzeug');
       expect(VoiceMatcher.detectPercussionSubInstrument('Pauken.pdf'), 'Pauken');
       expect(VoiceMatcher.detectPercussionSubInstrument('Timpani_in_F.pdf'), 'Pauken');
       expect(VoiceMatcher.detectPercussionSubInstrument('Mallets.pdf'), 'Mallets');
       expect(VoiceMatcher.detectPercussionSubInstrument('Glockenspiel.pdf'), 'Mallets');
       expect(VoiceMatcher.detectPercussionSubInstrument('Mellods_1.pdf'), 'Mallets');
-      expect(VoiceMatcher.detectPercussionSubInstrument('Percussion_1.pdf'), 'Percussion');
-      expect(VoiceMatcher.detectPercussionSubInstrument('Becken_Triangel.pdf'), 'Percussion');
     });
 
     test('prioritizes selected percussion sub-instrument (e.g. Pauken)', () {
@@ -127,6 +127,23 @@ void main() {
       final match = VoiceMatcher.findDetailedMatch(parts, paukenProfile);
       expect(match, isNotNull);
       expect(match!.part.fileName, 'Pauken.pdf');
+      expect(match.quality, MatchQuality.exact);
+    });
+
+    test('matches Percussion.pdf as exact match when Schlagzeug is selected', () {
+      const schlagzeugProfile = MusicianProfile(
+        instrument: 'Percussion',
+        percussionInstrument: 'Schlagzeug',
+      );
+      final parts = [
+        VoiceMatcher.parsePartFileName('01_Partitur.pdf', 's', '/1'),
+        VoiceMatcher.parsePartFileName('Percussion.pdf', 's', '/2'),
+        VoiceMatcher.parsePartFileName('Pauken.pdf', 's', '/3'),
+      ];
+
+      final match = VoiceMatcher.findDetailedMatch(parts, schlagzeugProfile);
+      expect(match, isNotNull);
+      expect(match!.part.fileName, 'Percussion.pdf');
       expect(match.quality, MatchQuality.exact);
     });
 

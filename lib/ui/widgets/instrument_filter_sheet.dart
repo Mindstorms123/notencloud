@@ -36,9 +36,10 @@ class _InstrumentFilterSheetState extends State<InstrumentFilterSheet> {
     _selectedInstrument = widget.currentProfile.instrument;
     _selectedVoice = widget.currentProfile.voiceNumber;
     _selectedKey = widget.currentProfile.keyOrClef;
-    _selectedPercussionInstrument = widget.currentProfile.percussionInstrument.isEmpty
+    final perc = widget.currentProfile.percussionInstrument;
+    _selectedPercussionInstrument = perc.isEmpty
         ? 'Alle'
-        : widget.currentProfile.percussionInstrument;
+        : (perc == 'Percussion' ? 'Schlagzeug' : perc);
     _onlyMyVoice = widget.onlyMyVoice;
   }
 

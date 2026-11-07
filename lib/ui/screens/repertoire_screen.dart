@@ -646,13 +646,6 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                       subValue: 'Mallets',
                       isDark: isDark,
                     ),
-                    const SizedBox(width: 6),
-                    _buildPercussionChip(
-                      label: 'Percussion',
-                      icon: Icons.music_note_rounded,
-                      subValue: 'Percussion',
-                      isDark: isDark,
-                    ),
                   ],
                 ),
               ),

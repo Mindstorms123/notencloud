@@ -554,7 +554,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     key: ValueKey('perc_sub_${_profile.percussionInstrument}'),
                     initialValue: _profile.percussionInstrument.isEmpty
                         ? 'Alle'
-                        : _profile.percussionInstrument,
+                        : (_profile.percussionInstrument == 'Percussion'
+                            ? 'Schlagzeug'
+                            : _profile.percussionInstrument),
                     decoration: const InputDecoration(
                       labelText: 'Schlagwerk-Instrument',
                       prefixIcon: Icon(Icons.album_rounded),
@@ -562,10 +564,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     items: const [
                       DropdownMenuItem(value: 'Alle', child: Text('Alle / Flexibel')),
-                      DropdownMenuItem(value: 'Schlagzeug', child: Text('Schlagzeug / Drums')),
+                      DropdownMenuItem(value: 'Schlagzeug', child: Text('Schlagzeug (inkl. Drums & Percussion)')),
                       DropdownMenuItem(value: 'Pauken', child: Text('Pauken (Timpani)')),
-                      DropdownMenuItem(value: 'Mallets', child: Text('Mallets (Glockenspiel, Xylo)')),
-                      DropdownMenuItem(value: 'Percussion', child: Text('Percussion (Becken, Perc. 1/2)')),
+                      DropdownMenuItem(value: 'Mallets', child: Text('Mallets (Glockenspiel, Xylo etc.)')),
                     ],
                     onChanged: (val) {
                       if (val != null) {

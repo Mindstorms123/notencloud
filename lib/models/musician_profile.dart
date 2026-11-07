@@ -19,7 +19,6 @@ class MusicianProfile {
     'Schlagzeug',
     'Pauken',
     'Mallets',
-    'Percussion',
   ];
 
   /// Default profile when starting the app for the first time
@@ -58,12 +57,14 @@ class MusicianProfile {
       };
 
   factory MusicianProfile.fromJson(Map<String, dynamic> json) {
+    var perc = json['percussionInstrument'] as String? ?? '';
+    if (perc == 'Percussion') perc = 'Schlagzeug';
     return MusicianProfile(
       instrument: json['instrument'] as String? ?? 'Trompete',
       voiceNumber: json['voiceNumber'] as int? ?? 1,
       keyOrClef: json['keyOrClef'] as String? ?? '',
       customVoiceName: json['customVoiceName'] as String? ?? '',
-      percussionInstrument: json['percussionInstrument'] as String? ?? '',
+      percussionInstrument: perc,
     );
   }
 

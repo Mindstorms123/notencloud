@@ -90,11 +90,9 @@ class VoiceMatcher {
     'direktion': ['direktion', 'direktion in c', 'direktion in b', 'conductor', 'lead sheet'],
   };
 
-  /// Aliases for specific percussion sub-instruments
+  /// Aliases for specific percussion sub-instruments (Schlagzeug, Pauken, Mallets).
+  /// Note: Percussion, Perkussion, Drums etc. all map to Schlagzeug!
   static const Map<String, List<String>> percussionSubAliases = {
-    'schlagzeug': [
-      'schlagzeug', 'drums', 'drum set', 'drumset', 'drum-set', 'batterie', 'snare', 'kleine trommel',
-    ],
     'pauken': [
       'pauken', 'pauke', 'timpani', 'timp', 'kettledrums',
     ],
@@ -103,34 +101,34 @@ class VoiceMatcher {
       'xylo', 'marimba', 'marimbaphon', 'vibraphon', 'vibraphone', 'vibes', 'bells', 'orchestra bells',
       'chimes', 'tubular bells', 'roehrenglocken', 'schellen',
     ],
-    'percussion': [
-      'percussion', 'perkussion', 'perc', 'perk', 'becken', 'cymbals', 'crash', 'ride',
-      'triangel', 'triangle', 'tambourin', 'tambourine', 'tamburin', 'conga', 'congas',
+    'schlagzeug': [
+      'schlagzeug', 'drums', 'drum set', 'drumset', 'drum-set', 'batterie', 'snare', 'kleine trommel',
+      'grosse trommel', 'bass drum', 'percussion', 'perkussion', 'perc', 'perk', 'becken', 'cymbals',
+      'crash', 'ride', 'triangel', 'triangle', 'tambourin', 'tambourine', 'tamburin', 'conga', 'congas',
       'bongo', 'bongos', 'shaker', 'claves', 'castanets', 'kastagnetten', 'tam tam', 'tamtam',
-      'gong', 'woodblock', 'cowbell', 'kuhglocke', 'grosse trommel', 'bass drum',
+      'gong', 'woodblock', 'cowbell', 'kuhglocke',
     ],
   };
 
-  /// Detects which specific percussion sub-instrument a part or file name represents
+  /// Detects which specific percussion sub-instrument a part or file name represents.
+  /// Parts with "Percussion", "Drums", etc. map to "Schlagzeug".
   static String detectPercussionSubInstrument(String fileName) {
     final norm = normalize(fileName);
     for (final entry in percussionSubAliases.entries) {
       for (final alias in entry.value) {
         if (norm.contains(alias)) {
           switch (entry.key) {
-            case 'schlagzeug':
-              return 'Schlagzeug';
             case 'pauken':
               return 'Pauken';
             case 'mallets':
               return 'Mallets';
-            case 'percussion':
-              return 'Percussion';
+            case 'schlagzeug':
+              return 'Schlagzeug';
           }
         }
       }
     }
-    return 'Percussion';
+    return 'Schlagzeug';
   }
 
   /// Canonical display names with correct capitalization and hyphens
