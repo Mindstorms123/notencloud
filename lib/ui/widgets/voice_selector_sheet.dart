@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/musician_profile.dart';
 import '../../models/song.dart';
+import '../../services/digitization_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
 
@@ -24,6 +25,7 @@ class VoiceSelectorSheet extends StatelessWidget {
       final m = VoiceMatcher.scorePart(p, profile);
       return m.score >= 80;
     });
+    final auditReport = !song.isDocumentOrList ? DigitizationService.analyzeSong(song) : null;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -222,6 +224,67 @@ class VoiceSelectorSheet extends StatelessWidget {
               },
             ),
           ),
+          if (auditReport != null && auditReport.missingParts.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.rose.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.rose.withValues(alpha: 0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.assignment_late_rounded, size: 16, color: AppTheme.rose),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Noch nicht digitalisiert (${auditReport.missingParts.length} Stimmen fehlen)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.rose,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: auditReport.missingParts.map((m) {
+                        final isMyMissing =
+                            m.toLowerCase().contains(profile.instrument.toLowerCase());
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isMyMissing
+                                ? AppTheme.rose.withValues(alpha: 0.25)
+                                : AppTheme.darkCard,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isMyMissing ? AppTheme.rose : AppTheme.darkBorder,
+                              width: isMyMissing ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Text(
+                            m,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isMyMissing ? FontWeight.bold : FontWeight.w500,
+                              color: isMyMissing ? AppTheme.rose : AppTheme.darkTextSecondary,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -14,6 +14,7 @@ import '../../services/storage_service.dart';
 import '../../services/update_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
+import 'digitization_audit_screen.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -1200,6 +1201,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           Text('Noten-Ordner Guideline', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                           Text('Empfohlene Benennung für Lieder & Stimmen', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Digitalisierungs-Check Info Card
+          Material(
+            color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () {
+                final songs = widget.storageService.getCachedSongs();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (ctx) => DigitizationAuditScreen(
+                      allSongs: songs,
+                      storageService: widget.storageService,
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.rose.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.rule_folder_rounded, color: AppTheme.rose, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Digitalisierungs-Check (Fehlende Noten)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Erkennt fehlende Stimmen & Lücken • PDF-Export für Notenwart', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
                         ],
                       ),
                     ),

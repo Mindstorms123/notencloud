@@ -9,6 +9,7 @@ import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
 import '../widgets/voice_selector_sheet.dart';
 import '../widgets/instrument_filter_sheet.dart';
+import 'digitization_audit_screen.dart';
 import 'score_viewer_screen.dart';
 
 class RepertoireScreen extends StatefulWidget {
@@ -469,6 +470,21 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.rule_folder_rounded, color: AppTheme.amber),
+            tooltip: 'Digitalisierungs-Check (Fehlende Noten)',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (ctx) => DigitizationAuditScreen(
+                    allSongs: _allSongs,
+                    storageService: widget.storageService,
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.download_for_offline_rounded),
             tooltip: 'Alle Stimmen für Bühne vorladen',
