@@ -1,11 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'services/storage_service.dart';
 import 'ui/screens/main_navigation_screen.dart';
+import 'ui/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final storageService = await StorageService.init();
+  
+  // Initialize German locale data for DateFormat
+  await initializeDateFormatting('de_DE', null);
 
+  // Set transparent status bar with light icons for dark stage theme
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+    ),
+  );
+
+  final storageService = await StorageService.init();
   runApp(NotencloudApp(storageService: storageService));
 }
 
@@ -19,32 +34,9 @@ class NotencloudApp extends StatelessWidget {
     return MaterialApp(
       title: 'Notencloud',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E88E5), // Blue 600
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E88E5),
-          brightness: Brightness.dark,
-          surface: const Color(0xFF181818),
-        ),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        appBarTheme: const AppBarTheme(
-          centerTitle: false,
-          elevation: 0,
-          backgroundColor: Color(0xFF181818),
-        ),
-      ),
+      themeMode: ThemeMode.dark, // Default to sleek Stage Dark Mode
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       home: MainNavigationScreen(storageService: storageService),
     );
   }

@@ -8,6 +8,8 @@ import '../../models/setlist.dart';
 import '../../services/annotation_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
+import '../../services/voice_matcher.dart';
+import '../theme/app_theme.dart';
 import '../widgets/annotation_canvas.dart';
 import '../widgets/annotation_toolbar.dart';
 import '../widgets/voice_selector_sheet.dart';
@@ -39,7 +41,10 @@ class ScoreViewerScreen extends StatefulWidget {
 }
 
 class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
+  late Song _currentSong;
   late PartFile _currentPart;
+  late int _currentSetlistIndex;
+
   PdfViewerController? _pdfController;
   int _currentPage = 1;
   int _pageCount = 1;
@@ -58,7 +63,9 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   @override
   void initState() {
     super.initState();
+    _currentSong = widget.song;
     _currentPart = widget.initialPart;
+    _currentSetlistIndex = widget.setlistIndex;
     _pdfController = PdfViewerController();
     _preparePdf();
   }
@@ -70,9 +77,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     });
 
     try {
-      // Check if file is already cached locally
       final localPath = await widget.storageService.getLocalPdfPath(
-        widget.song.id,
+        _currentSong.id,
         _currentPart.fileName,
       );
 
@@ -86,7 +92,6 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         return;
       }
 
-      // If not cached, download from Nextcloud
       if (widget.nextcloudService != null) {
         await widget.nextcloudService!.downloadPart(_currentPart, localPath);
         setState(() {
@@ -96,7 +101,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         _loadPageAnnotations(1);
       } else {
         setState(() {
-          _errorMessage = 'Noten-Datei nicht lokal verfügbar und keine Cloud-Verbindung aktiv.';
+          _errorMessage = 'Notendatei nicht im lokalen Speicher und keine Cloud-Verbindung aktiv.';
           _isLoadingPdf = false;
         });
       }
@@ -111,7 +116,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   Future<void> _loadPageAnnotations(int page) async {
     if (_pageAnnotations.containsKey(page)) return;
     final ann = await widget.annotationService.loadAnnotations(
-      widget.song.id,
+      _currentSong.id,
       _currentPart.id,
       page,
     );
@@ -125,7 +130,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   Future<void> _saveCurrentAnnotations(int page, PageAnnotations ann) async {
     _pageAnnotations[page] = ann;
     await widget.annotationService.saveAnnotations(
-      widget.song.id,
+      _currentSong.id,
       _currentPart.id,
       ann,
     );
@@ -147,40 +152,146 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     _preparePdf();
   }
 
+  void _navigateToSetlistItem(int targetIndex) {
+    if (widget.currentSetlist == null) return;
+    final items = widget.currentSetlist!.items;
+    if (targetIndex < 0 || targetIndex >= items.length) return;
+
+    final targetItem = items[targetIndex];
+    if (targetItem.isIntermission) {
+      // Skip intermission in the direction
+      final step = targetIndex > _currentSetlistIndex ? 1 : -1;
+      _navigateToSetlistItem(targetIndex + step);
+      return;
+    }
+
+    final allSongs = widget.storageService.getCachedSongs();
+    final nextSong = allSongs.firstWhere(
+      (s) => s.id == targetItem.songId || s.folderName == targetItem.songFolderName,
+      orElse: () => Song(
+        id: targetItem.songId,
+        title: targetItem.songTitle,
+        folderName: targetItem.songFolderName,
+        remoteFolderPath: '',
+      ),
+    );
+
+    final bestMatch = VoiceMatcher.findBestMatch(nextSong.parts, widget.profile);
+    if (bestMatch == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.amber,
+          content: Text('Keine Stimme für "${nextSong.title}" gefunden.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _currentSetlistIndex = targetIndex;
+      _currentSong = nextSong;
+      _currentPart = bestMatch;
+      _pageAnnotations.clear();
+      _currentPage = 1;
+    });
+    _preparePdf();
+  }
+
+  bool get _hasPrevInSetlist {
+    if (widget.currentSetlist == null) return false;
+    for (int i = _currentSetlistIndex - 1; i >= 0; i--) {
+      if (!widget.currentSetlist!.items[i].isIntermission) return true;
+    }
+    return false;
+  }
+
+  bool get _hasNextInSetlist {
+    if (widget.currentSetlist == null) return false;
+    final items = widget.currentSetlist!.items;
+    for (int i = _currentSetlistIndex + 1; i < items.length; i++) {
+      if (!items[i].isIntermission) return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentAnn = _pageAnnotations[_currentPage] ?? PageAnnotations(pageIndex: _currentPage);
+    final inSetlistMode = widget.currentSetlist != null;
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: _isFullscreen
           ? null
           : AppBar(
-              backgroundColor: Colors.grey.shade900,
-              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.darkSurface,
+              foregroundColor: AppTheme.darkTextPrimary,
+              elevation: 0,
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.song.title,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    _currentSong.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: -0.2),
                   ),
-                  Text(
-                    _currentPart.fileName,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                  InkWell(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: AppTheme.darkSurface,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
+                        builder: (ctx) => VoiceSelectorSheet(
+                          song: _currentSong,
+                          currentPart: _currentPart,
+                          profile: widget.profile,
+                          onSelectPart: _switchPart,
+                        ),
+                      );
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.emerald,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            _currentPart.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: AppTheme.emerald, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, color: AppTheme.emerald, size: 16),
+                      ],
+                    ),
                   ),
                 ],
               ),
               actions: [
-                // Voice selector
+                // Voice selector button
                 IconButton(
-                  icon: const Icon(Icons.queue_music),
+                  icon: const Icon(Icons.queue_music_rounded, color: AppTheme.primaryLight),
                   tooltip: 'Stimme wechseln',
                   onPressed: () {
                     showModalBottomSheet(
                       context: context,
+                      backgroundColor: AppTheme.darkSurface,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                      ),
                       builder: (ctx) => VoiceSelectorSheet(
-                        song: widget.song,
+                        song: _currentSong,
                         currentPart: _currentPart,
                         profile: widget.profile,
                         onSelectPart: _switchPart,
@@ -188,10 +299,13 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                     );
                   },
                 ),
-                // Stage mode / Fullscreen
+                // Fullscreen Stage Mode Toggle
                 IconButton(
-                  icon: Icon(_isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-                  tooltip: 'Bühnenmodus (Vollbild)',
+                  icon: Icon(
+                    _isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                    color: Colors.white,
+                  ),
+                  tooltip: 'Vollbildmodus',
                   onPressed: () {
                     setState(() {
                       _isFullscreen = !_isFullscreen;
@@ -202,15 +316,15 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
             ),
       body: Stack(
         children: [
-          // PDF Canvas area
+          // PDF Display
           if (_isLoadingPdf)
             const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: Colors.white),
+                  CircularProgressIndicator(color: AppTheme.primaryLight),
                   SizedBox(height: 16),
-                  Text('Lade Noten...', style: TextStyle(color: Colors.white70)),
+                  Text('Lade Noten...', style: TextStyle(color: AppTheme.darkTextSecondary)),
                 ],
               ),
             )
@@ -221,15 +335,19 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
+                    const Icon(Icons.error_outline_rounded, color: AppTheme.rose, size: 48),
                     const SizedBox(height: 12),
                     Text(
                       _errorMessage!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70),
+                      style: const TextStyle(color: AppTheme.darkTextSecondary),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed: _preparePdf,
                       child: const Text('Erneut versuchen'),
                     ),
@@ -239,7 +357,6 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
             )
           else if (_localPdfPath != null)
             GestureDetector(
-              // In fullscreen mode, double tap toggles appbar back
               onDoubleTap: () {
                 setState(() {
                   _isFullscreen = !_isFullscreen;
@@ -291,6 +408,69 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               ),
             ),
 
+          // Floating Setlist Stage Navigation Bar (when in Setlist mode)
+          if (inSetlistMode && !_isLoadingPdf)
+            Positioned(
+              top: _isFullscreen ? 16 : 8,
+              left: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.darkBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_rounded, size: 14, color: Colors.white),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _hasPrevInSetlist
+                          ? () => _navigateToSetlistItem(_currentSetlistIndex - 1)
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_currentSetlistIndex + 1} / ${widget.currentSetlist!.items.length}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.white),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _hasNextInSetlist
+                          ? () => _navigateToSetlistItem(_currentSetlistIndex + 1)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Floating Page indicator (top right)
+          if (!_isLoadingPdf && _errorMessage == null)
+            Positioned(
+              top: _isFullscreen ? 16 : 8,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.darkBorder),
+                ),
+                child: Text(
+                  'Seite $_currentPage / $_pageCount',
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+
           // Floating Annotation Toolbar (bottom center)
           if (!_isLoadingPdf && _errorMessage == null)
             Positioned(
@@ -312,7 +492,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                     setState(() {
                       _activeTool = tool;
                       if (tool == StrokeType.highlighter) {
-                        _activeColor = const Color(0xFFFFEB3B); // Yellow
+                        _activeColor = const Color(0xFFFFEB3B);
                         _activeStrokeWidth = 8.0;
                       } else if (tool == StrokeType.pen) {
                         _activeColor = Colors.black87;
@@ -326,7 +506,6 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                     });
                   },
                   onUndo: () {
-                    // Undo on current page
                     if (currentAnn.strokes.isNotEmpty) {
                       final updated = List<Stroke>.from(currentAnn.strokes)..removeLast();
                       _onAnnotationsChanged(currentAnn.copyWith(strokes: updated));
@@ -334,7 +513,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                   },
                   onClearPage: () async {
                     await widget.annotationService.clearPageAnnotations(
-                      widget.song.id,
+                      _currentSong.id,
                       _currentPart.id,
                       _currentPage,
                     );
@@ -342,24 +521,6 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                       _pageAnnotations[_currentPage] = PageAnnotations(pageIndex: _currentPage);
                     });
                   },
-                ),
-              ),
-            ),
-
-          // Floating Page indicator & setlist navigation
-          if (!_isLoadingPdf && _errorMessage == null)
-            Positioned(
-              top: _isFullscreen ? 16 : 8,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.65),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  'Seite $_currentPage / $_pageCount',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
             ),

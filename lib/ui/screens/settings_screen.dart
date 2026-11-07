@@ -3,6 +3,7 @@ import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
+import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   final StorageService storageService;
@@ -102,52 +103,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Guideline: Noten-Ordnerstruktur'),
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.lightbulb_rounded, color: AppTheme.amber),
+            SizedBox(width: 10),
+            Text('Noten-Ordner Guideline', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
         content: const SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Damit die App automatisch deine Stimme findet, empfehlen wir folgendes Schema auf der Nextcloud:',
-                style: TextStyle(fontSize: 14),
+                'Damit die App deine Stimme automatisch findet, empfehlen wir folgende Struktur auf der Nextcloud:',
+                style: TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
               ),
-              SizedBox(height: 12),
+              SizedBox(height: 14),
               Text(
-                '1. Ordner pro Stück:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                '1. Kategorie- und Lieder-Ordner:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
+              SizedBox(height: 6),
               Text(
-                'Nextcloud/Notenarchiv/\n'
-                '├── _Setlisten/  (für Auftrittslisten)\n'
-                '├── 001_Alte_Kameraden/\n'
-                '│   ├── Partitur.pdf\n'
-                '│   ├── Trompete_1_Bb.pdf\n'
-                '│   ├── Trompete_2_Bb.pdf\n'
-                '│   └── Posaune_1_C.pdf\n'
-                '└── 002_Bohemian_Rhapsody/...',
-                style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                'Nextcloud/Noten/\n'
+                '├── 01_Aktuelle Noten/\n'
+                '│   └── Under Pressure/\n'
+                '│       ├── Partitur.pdf\n'
+                '│       ├── Trumpet/ (Stimmordner)\n'
+                '│       │   ├── 1. Trumpet.pdf\n'
+                '│       │   └── 2. Trumpet.pdf\n'
+                '│       └── Trombone/ ...\n'
+                '└── 02_Ältere Noten/...',
+                style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: AppTheme.primaryLight),
               ),
-              SizedBox(height: 12),
+              SizedBox(height: 14),
               Text(
                 '2. Benennung der Stimmen:',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
+              SizedBox(height: 6),
               Text(
-                '[Instrument]_[Stimme]_[Stimmung].[pdf]\n'
-                'Beispiele:\n'
                 '• Trompete_1_Bb.pdf\n'
+                '• 1. Trumpet.pdf (im Ordner Trumpet)\n'
                 '• Klarinette_2_Bb.pdf\n'
                 '• Altsaxophon_1_Eb.pdf\n'
-                '• Posaune_1_Bass.pdf\n'
-                '• Trompete_1-2_Bb.pdf (Kombistimme)',
-                style: TextStyle(fontSize: 13),
+                '• Posaune_1_C.pdf\n'
+                '• Horn_1-2_in_F.pdf (Kombistimme)',
+                style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
               ),
             ],
           ),
         ),
         actions: [
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Verstanden'),
           ),
@@ -158,266 +174,346 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Einstellungen & Profil', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF8B5CF6), AppTheme.primary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.tune_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Profil & Einstellungen',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline_rounded),
             tooltip: 'Noten-Guideline ansehen',
             onPressed: _showGuidelineDialog,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Section 1: Musician Profile
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.person, color: Theme.of(context).primaryColor),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Dein Musiker-Profil',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Die App filtert das Notenarchiv automatisch nach diesem Instrument.',
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                  const Divider(height: 24),
-
-                  // Instrument dropdown
-                  DropdownButtonFormField<String>(
-                    value: MusicianProfile.standardInstruments.contains(_profile.instrument)
-                        ? _profile.instrument
-                        : 'Trompete',
-                    decoration: const InputDecoration(
-                      labelText: 'Instrument',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: MusicianProfile.standardInstruments.map((inst) {
-                      return DropdownMenuItem(value: inst, child: Text(inst));
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _profile = _profile.copyWith(instrument: val);
-                        });
-                        _saveProfile();
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      // Voice number (1. Stimme, 2. Stimme...)
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          value: _profile.voiceNumber,
-                          decoration: const InputDecoration(
-                            labelText: 'Stimme',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: [
-                            const DropdownMenuItem(value: 0, child: Text('Keine / Alle')),
-                            const DropdownMenuItem(value: 1, child: Text('1. Stimme')),
-                            const DropdownMenuItem(value: 2, child: Text('2. Stimme')),
-                            const DropdownMenuItem(value: 3, child: Text('3. Stimme')),
-                            const DropdownMenuItem(value: 4, child: Text('4. Stimme')),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _profile = _profile.copyWith(voiceNumber: val);
-                              });
-                              _saveProfile();
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-
-                      // Key / Transposition
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: MusicianProfile.standardKeys.contains(_profile.keyOrClef)
-                              ? _profile.keyOrClef
-                              : 'Bb',
-                          decoration: const InputDecoration(
-                            labelText: 'Stimmung / Schlüssel',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: MusicianProfile.standardKeys.map((k) {
-                            return DropdownMenuItem(value: k, child: Text(k));
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _profile = _profile.copyWith(keyOrClef: val);
-                              });
-                              _saveProfile();
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
               ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.emerald.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.person_rounded, color: AppTheme.emerald, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Dein Musiker-Profil',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Automatische Stimmen-Zuweisung',
+                          style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Instrument selector
+                DropdownButtonFormField<String>(
+                  value: MusicianProfile.standardInstruments.contains(_profile.instrument)
+                      ? _profile.instrument
+                      : 'Trompete',
+                  decoration: const InputDecoration(
+                    labelText: 'Instrument',
+                    prefixIcon: Icon(Icons.music_note_rounded),
+                  ),
+                  items: MusicianProfile.standardInstruments.map((inst) {
+                    return DropdownMenuItem(value: inst, child: Text(inst));
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _profile = _profile.copyWith(instrument: val);
+                      });
+                      _saveProfile();
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                Row(
+                  children: [
+                    // Voice number
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value: _profile.voiceNumber,
+                        decoration: const InputDecoration(
+                          labelText: 'Stimme',
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 0, child: Text('Keine / Alle')),
+                          DropdownMenuItem(value: 1, child: Text('1. Stimme')),
+                          DropdownMenuItem(value: 2, child: Text('2. Stimme')),
+                          DropdownMenuItem(value: 3, child: Text('3. Stimme')),
+                          DropdownMenuItem(value: 4, child: Text('4. Stimme')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _profile = _profile.copyWith(voiceNumber: val);
+                            });
+                            _saveProfile();
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Key / Transposition
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: MusicianProfile.standardKeys.contains(_profile.keyOrClef)
+                            ? _profile.keyOrClef
+                            : 'Bb',
+                        decoration: const InputDecoration(
+                          labelText: 'Stimmung',
+                        ),
+                        items: MusicianProfile.standardKeys.map((k) {
+                          return DropdownMenuItem(value: k, child: Text(k));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _profile = _profile.copyWith(keyOrClef: val);
+                            });
+                            _saveProfile();
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
 
           // Section 2: Nextcloud Account
-          Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.cloud, color: Colors.blueAccent),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Nextcloud-Verbindung',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Verbinde die App mit deiner Orchester-Cloud zum automatischen Synchronisieren.',
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                  const Divider(height: 24),
-
-                  TextField(
-                    controller: _serverUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'Server-URL',
-                      hintText: 'https://cloud.mein-orchester.de',
-                      prefixIcon: Icon(Icons.link),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _saveAccount(),
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Benutzername',
-                      prefixIcon: Icon(Icons.account_circle),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _saveAccount(),
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Passwort / App-Token',
-                      prefixIcon: Icon(Icons.lock),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _saveAccount(),
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    controller: _rootFolderController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notenordner auf Cloud',
-                      hintText: '/Notenarchiv',
-                      prefixIcon: Icon(Icons.folder),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => _saveAccount(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  if (_connectionTestResult != null)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
-                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: _isConnectionSuccess ? Colors.green.shade50 : Colors.red.shade50,
-                        border: Border.all(
-                          color:
-                              _isConnectionSuccess ? Colors.green.shade300 : Colors.red.shade300,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppTheme.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isConnectionSuccess ? Icons.check_circle : Icons.error,
-                            color: _isConnectionSuccess ? Colors.green : Colors.red,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _connectionTestResult!,
-                              style: TextStyle(
-                                color: _isConnectionSuccess
-                                    ? Colors.green.shade800
-                                    : Colors.red.shade800,
-                                fontSize: 13,
-                              ),
+                      child: const Icon(Icons.cloud_rounded, color: AppTheme.primaryLight, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Nextcloud-Verbindung',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Synchronisation & Setlisten',
+                          style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                TextField(
+                  controller: _serverUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Server-URL',
+                    hintText: 'https://cloud.mein-orchester.de',
+                    prefixIcon: Icon(Icons.link_rounded),
+                  ),
+                  onChanged: (_) => _saveAccount(),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: _usernameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Benutzername / E-Mail',
+                    prefixIcon: Icon(Icons.account_circle_rounded),
+                  ),
+                  onChanged: (_) => _saveAccount(),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Passwort / App-Token',
+                    prefixIcon: Icon(Icons.lock_rounded),
+                  ),
+                  onChanged: (_) => _saveAccount(),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: _rootFolderController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notenordner',
+                    hintText: '/Noten',
+                    prefixIcon: Icon(Icons.folder_rounded),
+                  ),
+                  onChanged: (_) => _saveAccount(),
+                ),
+                const SizedBox(height: 16),
+
+                if (_connectionTestResult != null)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: _isConnectionSuccess
+                          ? AppTheme.emerald.withOpacity(0.12)
+                          : AppTheme.rose.withOpacity(0.12),
+                      border: Border.all(
+                        color: _isConnectionSuccess
+                            ? AppTheme.emerald.withOpacity(0.3)
+                            : AppTheme.rose.withOpacity(0.3),
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _isConnectionSuccess ? Icons.check_circle_rounded : Icons.error_rounded,
+                          color: _isConnectionSuccess ? AppTheme.emerald : AppTheme.rose,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _connectionTestResult!,
+                            style: TextStyle(
+                              color: _isConnectionSuccess ? AppTheme.emerald : AppTheme.rose,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(46),
-                    ),
-                    onPressed: _isTestingConnection ? null : _testConnection,
-                    icon: _isTestingConnection
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.cable),
-                    label: const Text('Verbindung testen & speichern'),
                   ),
-                ],
-              ),
+
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: _isTestingConnection ? null : _testConnection,
+                  icon: _isTestingConnection
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.wifi_tethering_rounded),
+                  label: const Text('Verbindung testen & speichern', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // Guideline info card
-          Card(
-            color: Colors.blue.shade50,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ListTile(
-              leading: const Icon(Icons.lightbulb_outline, color: Colors.blue),
-              title: const Text('Noten-Ordner Guideline',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Erfahre, wie du deine Stücke für beste Erkennung sortierst.'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          // Guideline Info Card
+          Material(
+            color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+            borderRadius: BorderRadius.circular(20),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
               onTap: _showGuidelineDialog,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.amber.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.lightbulb_rounded, color: AppTheme.amber, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Noten-Ordner Guideline', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Empfohlene Benennung für Lieder & Stimmen', style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted)),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

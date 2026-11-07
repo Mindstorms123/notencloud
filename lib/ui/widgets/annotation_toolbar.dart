@@ -1,5 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../models/annotation.dart';
+import '../theme/app_theme.dart';
 
 class AnnotationToolbar extends StatelessWidget {
   final bool isDrawingActive;
@@ -26,136 +28,218 @@ class AnnotationToolbar extends StatelessWidget {
   });
 
   static const List<Color> penColors = [
-    Colors.black87,
-    Color(0xFFD32F2F), // Red (Dirigenten-Rot)
-    Color(0xFF1976D2), // Blue
-    Color(0xFF388E3C), // Green
+    Color(0xFFF8FAFC), // White/Silver for dark stage
+    Color(0xFF1E293B), // Charcoal Black
+    Color(0xFFEF4444), // Conductor Red
+    Color(0xFF3B82F6), // Blue
+    Color(0xFF10B981), // Emerald
   ];
 
   static const List<Color> highlighterColors = [
-    Color(0xFFFFEB3B), // Yellow
-    Color(0xFF76FF03), // Lime
-    Color(0xFFFF9800), // Orange
-    Color(0xFF00E5FF), // Cyan
+    Color(0xFFFACC15), // Neon Yellow
+    Color(0xFF4ADE80), // Neon Green
+    Color(0xFFFB923C), // Neon Orange
+    Color(0xFF38BDF8), // Neon Cyan
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Master Pen mode toggle
-            IconButton(
-              icon: Icon(
-                isDrawingActive ? Icons.edit : Icons.edit_off_outlined,
-                color: isDrawingActive ? Theme.of(context).primaryColor : Colors.grey,
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 420),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF13151D).withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1,
               ),
-              tooltip: isDrawingActive ? 'Stift aktiv' : 'Lese-Modus (Stift aus)',
-              onPressed: onToggleDrawing,
-            ),
-            if (isDrawingActive) ...[
-              const VerticalDivider(width: 16, thickness: 1),
-              // Pen tool
-              IconButton(
-                icon: const Icon(Icons.brush),
-                color: activeTool == StrokeType.pen ? activeColor : Colors.grey,
-                tooltip: 'Bleistift / Stift',
-                onPressed: () => onSelectTool(StrokeType.pen),
-              ),
-              // Highlighter tool
-              IconButton(
-                icon: const Icon(Icons.highlight),
-                color: activeTool == StrokeType.highlighter ? Colors.amber : Colors.grey,
-                tooltip: 'Textmarker',
-                onPressed: () => onSelectTool(StrokeType.highlighter),
-              ),
-              // Eraser tool
-              IconButton(
-                icon: const Icon(Icons.auto_fix_normal),
-                color: activeTool == StrokeType.eraser ? Colors.redAccent : Colors.grey,
-                tooltip: 'Radiergummi',
-                onPressed: () => onSelectTool(StrokeType.eraser),
-              ),
-              const VerticalDivider(width: 16, thickness: 1),
-              // Color selection
-              if (activeTool != StrokeType.eraser)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: (activeTool == StrokeType.highlighter
-                          ? highlighterColors
-                          : penColors)
-                      .map((color) {
-                    final isSelected = activeColor.value == color.value;
-                    return GestureDetector(
-                      onTap: () => onSelectColor(color),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: 22,
-                        height: 22,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected ? Colors.white : Colors.black26,
-                            width: isSelected ? 2.5 : 1.0,
-                          ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: color.withOpacity(0.5),
-                                    blurRadius: 4,
-                                    spreadRadius: 1,
-                                  )
-                                ]
-                              : null,
-                        ),
-                      ),
-                    );
-                  }).toList(),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 18,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 4),
                 ),
-              const VerticalDivider(width: 16, thickness: 1),
-              // Undo
-              IconButton(
-                icon: const Icon(Icons.undo),
-                tooltip: 'Rückgängig',
-                onPressed: onUndo,
-              ),
-              // Clear page
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Seite leeren',
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Anmerkungen löschen?'),
-                      content: const Text(
-                          'Möchtest du wirklich alle Zeichnungen auf dieser Seite löschen?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Abbrechen'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            onClearPage();
-                          },
-                          child: const Text('Löschen', style: TextStyle(color: Colors.red)),
-                        ),
-                      ],
+              ],
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Pen Mode Toggle Capsule
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
+                    icon: Icon(
+                      isDrawingActive ? Icons.edit_rounded : Icons.edit_outlined,
+                      color: isDrawingActive ? AppTheme.primaryLight : AppTheme.darkTextMuted,
+                      size: 20,
                     ),
-                  );
-                },
+                    tooltip: isDrawingActive ? 'Stift aktiv' : 'Lese-Modus',
+                    onPressed: onToggleDrawing,
+                  ),
+
+                  if (isDrawingActive) ...[
+                    Container(
+                      height: 20,
+                      width: 1,
+                      color: Colors.white.withValues(alpha: 0.15),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                    ),
+
+                    // Pen Tool
+                    _ToolButton(
+                      icon: Icons.draw_rounded,
+                      isSelected: activeTool == StrokeType.pen,
+                      activeColor: activeColor,
+                      tooltip: 'Bleistift',
+                      onTap: () => onSelectTool(StrokeType.pen),
+                    ),
+
+                    // Highlighter Tool
+                    _ToolButton(
+                      icon: Icons.brush_rounded,
+                      isSelected: activeTool == StrokeType.highlighter,
+                      activeColor: Colors.amber,
+                      tooltip: 'Textmarker',
+                      onTap: () => onSelectTool(StrokeType.highlighter),
+                    ),
+
+                    // Eraser Tool
+                    _ToolButton(
+                      icon: Icons.auto_fix_normal_rounded,
+                      isSelected: activeTool == StrokeType.eraser,
+                      activeColor: AppTheme.rose,
+                      tooltip: 'Radierer',
+                      onTap: () => onSelectTool(StrokeType.eraser),
+                    ),
+
+                    Container(
+                      height: 20,
+                      width: 1,
+                      color: Colors.white.withValues(alpha: 0.15),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+
+                    // Color Palette
+                    if (activeTool != StrokeType.eraser)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: (activeTool == StrokeType.highlighter
+                                ? highlighterColors
+                                : penColors)
+                            .map((color) {
+                          final isSelected = activeColor.toARGB32() == color.toARGB32();
+                          return GestureDetector(
+                            onTap: () => onSelectColor(color),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 3),
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected ? Colors.white : Colors.black45,
+                                  width: isSelected ? 2.0 : 1.0,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: color.withValues(alpha: 0.6),
+                                          blurRadius: 5,
+                                          spreadRadius: 1,
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+
+                    Container(
+                      height: 20,
+                      width: 1,
+                      color: Colors.white.withValues(alpha: 0.15),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+
+                    // Undo
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(6),
+                      icon: const Icon(Icons.undo_rounded, size: 18),
+                      color: AppTheme.darkTextSecondary,
+                      tooltip: 'Rückgängig',
+                      onPressed: onUndo,
+                    ),
+
+                    // Clear Page
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(6),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                      color: AppTheme.rose,
+                      tooltip: 'Seite leeren',
+                      onPressed: onClearPage,
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolButton extends StatelessWidget {
+  final IconData icon;
+  final bool isSelected;
+  final Color activeColor;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _ToolButton({
+    required this.icon,
+    required this.isSelected,
+    required this.activeColor,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isSelected ? activeColor.withValues(alpha: 0.2) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: isSelected
+                ? Border.all(color: activeColor.withValues(alpha: 0.6), width: 1.5)
+                : null,
+          ),
+          child: Icon(
+            icon,
+            size: 19,
+            color: isSelected ? activeColor : AppTheme.darkTextMuted,
+          ),
         ),
       ),
     );

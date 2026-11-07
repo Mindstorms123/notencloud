@@ -6,6 +6,7 @@ import '../../services/annotation_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/voice_matcher.dart';
+import '../theme/app_theme.dart';
 import '../widgets/voice_selector_sheet.dart';
 import 'score_viewer_screen.dart';
 
@@ -117,17 +118,21 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${remoteSongs.length} Stücke erfolgreich synchronisiert!')),
+          SnackBar(
+            backgroundColor: AppTheme.emerald,
+            content: Text('${remoteSongs.length} Stücke erfolgreich synchronisiert!'),
+          ),
         );
       }
     } catch (e) {
       setState(() {
         _isSyncing = false;
+        _syncMessage = null;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.rose,
             content: Text('Synchronisationsfehler: $e'),
           ),
         );
@@ -146,13 +151,32 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Bühnen-Download'),
+          backgroundColor: AppTheme.darkCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.offline_pin_rounded, color: AppTheme.emerald),
+              SizedBox(width: 10),
+              Text('Bühnen-Download', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              LinearProgressIndicator(value: total > 0 ? current / total : 0),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: total > 0 ? current / total : 0,
+                  backgroundColor: AppTheme.darkSurface,
+                  color: AppTheme.emerald,
+                  minHeight: 8,
+                ),
+              ),
               const SizedBox(height: 16),
-              Text('$current von $total Stücken heruntergeladen...'),
+              Text(
+                '$current von $total Stücken heruntergeladen...',
+                style: const TextStyle(color: AppTheme.darkTextSecondary, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -176,9 +200,12 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     }
 
     if (mounted) {
-      Navigator.pop(context); // Close progress dialog
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Alle Stimmen für Offline-Betrieb heruntergeladen!')),
+        const SnackBar(
+          backgroundColor: AppTheme.emerald,
+          content: Text('Alle Stimmen für Offline-Betrieb heruntergeladen!'),
+        ),
       );
     }
   }
@@ -193,9 +220,12 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
 
     final bestMatch = VoiceMatcher.findBestMatch(song.parts, widget.profile);
     if (bestMatch == null) {
-      // Open voice selector sheet so musician can pick any other part or score
       showModalBottomSheet(
         context: context,
+        backgroundColor: AppTheme.darkCard,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         builder: (ctx) => VoiceSelectorSheet(
           song: song,
           currentPart: song.parts.first,
@@ -237,12 +267,34 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Noten & Repertoire', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.primary, AppTheme.primaryLight],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.library_music_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Notenarchiv',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.download_for_offline_outlined),
+            icon: const Icon(Icons.download_for_offline_rounded),
             tooltip: 'Alle Stimmen für Bühne vorladen',
             onPressed: _downloadAllForOffline,
           ),
@@ -251,63 +303,50 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryLight),
                   )
-                : const Icon(Icons.sync),
+                : const Icon(Icons.sync_rounded),
             tooltip: 'Mit Nextcloud synchronisieren',
             onPressed: _isSyncing ? null : _syncWithCloud,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
-          // Search Bar
+          // Search & Voice Filter Bar
           Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Stück suchen...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => _searchController.clear(),
-                      )
-                    : null,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-            ),
-          ),
-
-          // Active Profile Banner
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: Theme.of(context).primaryColor.withOpacity(0.08),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.person, size: 18, color: Theme.of(context).primaryColor),
-                const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    widget.profile.displayName,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).primaryColor,
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Stück suchen...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 22),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () => _searchController.clear(),
+                            )
+                          : null,
                     ),
                   ),
                 ),
+                const SizedBox(width: 10),
+                // "Nur meine" Toggle Pill
                 FilterChip(
-                  label: const Text('Nur meine', style: TextStyle(fontSize: 11)),
+                  label: const Text('Nur meine'),
                   selected: _onlyMyVoice,
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  avatar: Icon(
+                    _onlyMyVoice ? Icons.check_circle_rounded : Icons.person_rounded,
+                    size: 16,
+                    color: _onlyMyVoice ? Colors.white : AppTheme.darkTextMuted,
+                  ),
+                  selectedColor: AppTheme.emerald,
+                  checkmarkColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   onSelected: (val) {
                     setState(() {
                       _onlyMyVoice = val;
@@ -315,10 +354,54 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                     });
                   },
                 ),
-                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+
+          // Active Profile Status Indicator
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkSurface : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.emerald,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Text(
-                  '${_filteredSongs.length}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
+                  'Deine Stimme: ',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
+                  ),
+                ),
+                Text(
+                  widget.profile.displayName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${_filteredSongs.length} ${_filteredSongs.length == 1 ? "Stück" : "Stücke"}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                  ),
                 ),
               ],
             ),
@@ -327,35 +410,41 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
           // Live Sync Progress Bar
           if (_isSyncing)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: Colors.amber.shade50,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.amber.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.amber.withOpacity(0.3)),
+              ),
               child: Row(
                 children: [
                   const SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.amber),
                   ),
                   const SizedBox(width: 10),
                   Text(
                     _syncMessage ?? 'Synchronisiere...',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.amber.shade900,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.amber,
                     ),
                   ),
                 ],
               ),
             ),
 
-          // Category Filter Chips
+          // Category Sliding Filter Chips
           if (_categories.length > 2)
-            SizedBox(
-              height: 42,
+            Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: _categories.length,
                 itemBuilder: (context, index) {
                   final cat = _categories[index];
@@ -363,8 +452,14 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text(cat, style: const TextStyle(fontSize: 12)),
+                      label: Text(cat),
                       selected: isSelected,
+                      selectedColor: AppTheme.primary,
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? Colors.white : null,
+                      ),
                       onSelected: (selected) {
                         if (selected) {
                           setState(() {
@@ -386,113 +481,225 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.library_music_outlined, size: 64, color: Colors.grey.shade400),
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppTheme.darkSurface : Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.music_off_rounded,
+                            size: 48,
+                            color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400,
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           _allSongs.isEmpty
                               ? 'Noch keine Noten synchronisiert'
                               : 'Keine Stücke gefunden',
-                          style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
+                        Text(
+                          _onlyMyVoice
+                              ? 'Deaktiviere "Nur meine", um alle Stücke zu sehen'
+                              : 'Tippe auf Synchronisieren, um Noten zu laden',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                         if (_allSongs.isEmpty)
                           ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
                             onPressed: _syncWithCloud,
-                            icon: const Icon(Icons.cloud_download),
+                            icon: const Icon(Icons.cloud_download_rounded),
                             label: const Text('Jetzt aus Nextcloud laden'),
                           ),
                       ],
                     ),
                   )
                 : RefreshIndicator(
+                    color: AppTheme.primary,
                     onRefresh: _syncWithCloud,
                     child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       itemCount: _filteredSongs.length,
-                      separatorBuilder: (ctx, i) => const Divider(height: 1),
+                      separatorBuilder: (ctx, i) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         final song = _filteredSongs[index];
                         final bestMatch =
                             VoiceMatcher.findBestMatch(song.parts, widget.profile);
 
-                        return ListTile(
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          leading: CircleAvatar(
-                            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.12),
-                            foregroundColor: Theme.of(context).primaryColor,
-                            child: const Icon(Icons.music_note),
-                          ),
-                          title: Text(
-                            song.title,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                if (bestMatch != null)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.green.shade200),
-                                    ),
-                                    child: Text(
-                                      bestMatch.fileName,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.green.shade800,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'Keine ${widget.profile.instrument}-Stimme',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ),
-                                if (song.category.isNotEmpty)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.blue.shade200),
-                                    ),
-                                    child: Text(
-                                      song.category,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.blue.shade800,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                Text(
-                                  '${song.parts.length} Stimmen',
-                                  style: const TextStyle(color: Colors.grey, fontSize: 11),
+                        return Material(
+                          color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+                          borderRadius: BorderRadius.circular(16),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _openSong(song),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
                                 ),
-                              ],
+                              ),
+                              child: Row(
+                                children: [
+                                  // Left Musical Glyph Box
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: bestMatch != null
+                                          ? AppTheme.emerald.withOpacity(0.12)
+                                          : (isDark
+                                              ? AppTheme.darkSurface
+                                              : Colors.grey.shade100),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        bestMatch != null
+                                            ? Icons.music_note_rounded
+                                            : Icons.library_music_rounded,
+                                        color: bestMatch != null
+                                            ? AppTheme.emerald
+                                            : (isDark
+                                                ? AppTheme.darkTextMuted
+                                                : Colors.grey.shade500),
+                                        size: 22,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+
+                                  // Middle Information
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          song.title,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                            letterSpacing: -0.2,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          children: [
+                                            // Matching Voice Badge
+                                            if (bestMatch != null)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.emerald.withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: AppTheme.emerald.withOpacity(0.3),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.check_rounded,
+                                                        size: 12, color: AppTheme.emerald),
+                                                    const SizedBox(width: 4),
+                                                    Flexible(
+                                                      child: Text(
+                                                        bestMatch.fileName,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          color: AppTheme.emerald,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              )
+                                            else
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isDark
+                                                      ? AppTheme.darkSurface
+                                                      : Colors.grey.shade100,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  'Keine ${widget.profile.instrument}',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: isDark
+                                                        ? AppTheme.darkTextMuted
+                                                        : Colors.grey.shade600,
+                                                  ),
+                                                ),
+                                              ),
+
+                                            // Category Tag
+                                            if (song.category.isNotEmpty)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.primary.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Text(
+                                                  song.category,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: AppTheme.primaryLight,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+
+                                            // Parts Count
+                                            Text(
+                                              '${song.parts.length} Stimmen',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark
+                                                    ? AppTheme.darkTextMuted
+                                                    : AppTheme.lightTextMuted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Right Chevron
+                                  Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 14,
+                                    color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                          onTap: () => _openSong(song),
                         );
                       },
                     ),

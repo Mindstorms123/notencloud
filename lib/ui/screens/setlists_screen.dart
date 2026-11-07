@@ -5,6 +5,7 @@ import '../../models/setlist.dart';
 import '../../services/annotation_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
+import '../theme/app_theme.dart';
 import 'setlist_detail_screen.dart';
 
 class SetlistsScreen extends StatefulWidget {
@@ -59,6 +60,7 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            backgroundColor: AppTheme.emerald,
             content: Text('${remoteSetlists.length} Setlisten von Nextcloud synchronisiert!'),
           ),
         );
@@ -67,7 +69,7 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.rose,
             content: Text('Fehler beim Abrufen der Setlisten: $e'),
           ),
         );
@@ -89,7 +91,9 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Neue Setlist erstellen'),
+          backgroundColor: AppTheme.darkCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Neue Setlist erstellen', style: TextStyle(fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -97,15 +101,22 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                 controller: titleController,
                 decoration: const InputDecoration(
                   labelText: 'Titel / Anlass',
-                  hintText: 'z.B. Sommerfest 2026',
+                  hintText: 'z.B. Frühjahrskonzert 2027',
                 ),
                 autofocus: true,
               ),
               const SizedBox(height: 16),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.calendar_today),
-                title: Text('Datum: ${DateFormat('dd.MM.yyyy').format(selectedDate)}'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.calendar_month_rounded, color: AppTheme.primaryLight),
+                ),
+                title: Text('Datum: ${DateFormat('dd. MMMM yyyy', 'de_DE').format(selectedDate)}'),
                 trailing: TextButton(
                   child: const Text('Ändern'),
                   onPressed: () async {
@@ -131,6 +142,11 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
               child: const Text('Abbrechen'),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
               onPressed: () async {
                 final title = titleController.text.trim();
                 if (title.isEmpty) return;
@@ -142,8 +158,10 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
 
                 await widget.storageService.upsertSetlist(newSetlist);
                 _loadSetlists();
-                if (mounted) {
+                if (ctx.mounted) {
                   Navigator.pop(ctx);
+                }
+                if (mounted) {
                   _openSetlist(newSetlist);
                 }
               },
@@ -175,23 +193,44 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd.MM.yyyy');
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Setlisten & Auftritte', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.amber, Color(0xFFF97316)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.event_note_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Setlisten & Auftritte',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: -0.5),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: _isSyncing
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.amber),
                   )
-                : const Icon(Icons.sync),
+                : const Icon(Icons.sync_rounded),
             tooltip: 'Setlisten von Nextcloud laden',
             onPressed: _isSyncing ? null : _syncSetlistsWithCloud,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: _setlists.isEmpty
@@ -199,65 +238,197 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.format_list_bulleted, size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Noch keine Setlisten vorhanden',
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.darkSurface : Colors.grey.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.format_list_bulleted_rounded,
+                      size: 48,
+                      color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400,
+                    ),
                   ),
                   const SizedBox(height: 16),
+                  const Text(
+                    'Noch keine Setlisten vorhanden',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Erstelle eine Setlist für deine nächsten Konzerte',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                   ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
                     onPressed: _createNewSetlist,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Erste Setlist erstellen'),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Erste Setlist anlegen'),
                   ),
                 ],
               ),
             )
-          : RefreshIndicator(
-              onRefresh: _syncSetlistsWithCloud,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _setlists.length,
-                separatorBuilder: (ctx, i) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final setlist = _setlists[index];
-                  final playableSongs = setlist.items.where((i) => !i.isIntermission).length;
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: _setlists.length,
+              separatorBuilder: (ctx, i) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final setlist = _setlists[index];
+                final playableSongs = setlist.items.where((i) => !i.isIntermission).length;
+                final monthStr = DateFormat('MMM', 'de_DE').format(setlist.date).toUpperCase();
+                final dayStr = DateFormat('dd').format(setlist.date);
 
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).primaryColor.withOpacity(0.12),
-                      foregroundColor: Theme.of(context).primaryColor,
-                      child: const Icon(Icons.event_note),
-                    ),
-                    title: Text(
-                      setlist.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    subtitle: Row(
-                      children: [
-                        Text(dateFormat.format(setlist.date)),
-                        const SizedBox(width: 8),
-                        const Text('•'),
-                        const SizedBox(width: 8),
-                        Text('$playableSongs Stücke'),
-                        if (setlist.isSyncedWithCloud) ...[
-                          const SizedBox(width: 8),
-                          const Icon(Icons.cloud_done, size: 14, color: Colors.green),
-                        ],
-                      ],
-                    ),
-                    trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                return Material(
+                  color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
+                  borderRadius: BorderRadius.circular(16),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
                     onTap: () => _openSetlist(setlist),
-                  );
-                },
-              ),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Calendar Badge Square
+                          Container(
+                            width: 52,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: isDark ? AppTheme.darkSurface : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  monthStr,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.amber,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Text(
+                                  dayStr,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Setlist Info
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  setlist.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Text(
+                                      '$playableSongs ${playableSongs == 1 ? "Stück" : "Stücke"}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    if (setlist.isSyncedWithCloud)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.emerald.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.cloud_done_rounded, size: 12, color: AppTheme.emerald),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Nextcloud',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.emerald,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? AppTheme.darkSurface : Colors.grey.shade200,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'Lokal',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Chevron
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createNewSetlist,
-        icon: const Icon(Icons.add),
-        label: const Text('Neue Setlist'),
+        backgroundColor: AppTheme.primary,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Neue Setlist', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
     );
   }
