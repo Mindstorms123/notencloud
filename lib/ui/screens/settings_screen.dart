@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -108,6 +109,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final service = NextcloudService(_account);
     final success = await service.testConnection();
+
+    if (success) {
+      unawaited(service.ensureSetlistFolderExists());
+    }
 
     setState(() {
       _isTestingConnection = false;

@@ -34,6 +34,11 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
   void initState() {
     super.initState();
     _loadSetlists();
+    if (widget.nextcloudService != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _syncSetlistsWithCloud(silent: true);
+      });
+    }
   }
 
   void _loadSetlists() {
@@ -43,7 +48,7 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
     });
   }
 
-  Future<void> _syncSetlistsWithCloud() async {
+  Future<void> _syncSetlistsWithCloud({bool silent = false}) async {
     if (widget.nextcloudService == null) return;
 
     setState(() {
@@ -57,7 +62,7 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
       }
       _loadSetlists();
 
-      if (mounted) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.emerald,
@@ -66,7 +71,7 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: AppTheme.rose,
@@ -80,6 +85,37 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
           _isSyncing = false;
         });
       }
+    }
+  }
+
+  void _deleteSetlist(Setlist setlist) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Setlist löschen?'),
+        content: Text('Möchtest du "${setlist.title}" wirklich löschen?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen', style: TextStyle(color: AppTheme.darkTextMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.rose, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await widget.storageService.deleteSetlist(setlist.id);
+      if (widget.nextcloudService != null && setlist.isSyncedWithCloud) {
+        widget.nextcloudService!.deleteSetlist(setlist.id).catchError((_) => false);
+      }
+      _loadSetlists();
     }
   }
 
@@ -151,10 +187,17 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                 final title = titleController.text.trim();
                 if (title.isEmpty) return;
 
-                final newSetlist = Setlist.create(
+                var newSetlist = Setlist.create(
                   title: title,
                   date: selectedDate,
                 );
+
+                if (widget.nextcloudService != null) {
+                  final uploaded = await widget.nextcloudService!.uploadSetlist(newSetlist);
+                  if (uploaded) {
+                    newSetlist = newSetlist.copyWith(isSyncedWithCloud: true);
+                  }
+                }
 
                 await widget.storageService.upsertSetlist(newSetlist);
                 _loadSetlists();
@@ -363,7 +406,15 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                                         color: isDark ? AppTheme.darkTextSecondary : AppTheme.lightTextSecondary,
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '• ${widget.profile.displayName}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
                                     if (setlist.isSyncedWithCloud)
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -408,6 +459,35 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                               ],
                             ),
                           ),
+
+                          // More options / delete
+                          PopupMenuButton<String>(
+                            icon: Icon(
+                              Icons.more_vert_rounded,
+                              size: 18,
+                              color: isDark ? AppTheme.darkTextMuted : Colors.grey.shade400,
+                            ),
+                            color: AppTheme.darkCard,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            onSelected: (val) {
+                              if (val == 'delete') {
+                                _deleteSetlist(setlist);
+                              }
+                            },
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline_rounded, color: AppTheme.rose, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Setlist löschen', style: TextStyle(color: AppTheme.rose)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 4),
 
                           // Chevron
                           Icon(

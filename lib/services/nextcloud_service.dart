@@ -456,8 +456,16 @@ class NextcloudService {
     return file;
   }
 
+  /// Ensures that the central setlist directory exists on Nextcloud (`_Setlisten/`)
+  Future<bool> ensureSetlistFolderExists() async {
+    final setlistPath = '${account.cleanRootFolder}/_Setlisten';
+    return await ensureDirectoryExists(setlistPath);
+  }
+
   /// Fetch all setlists from the Nextcloud `_Setlisten/` directory
   Future<List<Setlist>> fetchSetlists() async {
+    await ensureSetlistFolderExists();
+
     final setlistPath = '${account.cleanRootFolder}/_Setlisten';
     final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
 
@@ -490,7 +498,7 @@ class NextcloudService {
         final getUrl = Uri.parse('${account.cleanServerUrl}$href');
         final getRes = await _client.get(getUrl, headers: _headers);
         if (getRes.statusCode == 200) {
-          final jsonMap = jsonDecode(getRes.body) as Map<String, dynamic>;
+          final jsonMap = jsonDecode(utf8.decode(getRes.bodyBytes)) as Map<String, dynamic>;
           setlists.add(Setlist.fromJson(jsonMap).copyWith(isSyncedWithCloud: true));
         }
       } catch (_) {
@@ -503,28 +511,13 @@ class NextcloudService {
 
   /// Check write permission for the setlists folder
   Future<bool> hasSetlistWritePermission() async {
-    final setlistPath = '${account.cleanRootFolder}/_Setlisten';
-    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
-
-    // Ensure folder exists or can be created
-    final req = http.Request('PROPFIND', url)
-      ..headers.addAll(_headers)
-      ..headers['Depth'] = '0';
-
-    final res = await _client.send(req);
-    if (res.statusCode == 404) {
-      // Try creating it
-      final mkcolReq = http.Request('MKCOL', url)..headers.addAll(_headers);
-      final mkcolRes = await _client.send(mkcolReq);
-      return mkcolRes.statusCode == 201;
-    }
-
-    return res.statusCode == 200 || res.statusCode == 207;
+    return await ensureSetlistFolderExists();
   }
 
   /// Upload a setlist JSON file to Nextcloud `_Setlisten/<id>.json`
   Future<bool> uploadSetlist(Setlist setlist) async {
-    await hasSetlistWritePermission();
+    final ok = await ensureSetlistFolderExists();
+    if (!ok) return false;
 
     final setlistPath = '${account.cleanRootFolder}/_Setlisten/${setlist.id}.json';
     final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
@@ -535,12 +528,25 @@ class NextcloudService {
         url,
         headers: {
           ..._headers,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
         },
-        body: content,
+        body: utf8.encode(content),
       );
 
       return res.statusCode == 201 || res.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Delete a setlist JSON file from Nextcloud
+  Future<bool> deleteSetlist(String setlistId) async {
+    final setlistPath = '${account.cleanRootFolder}/_Setlisten/$setlistId.json';
+    final url = Uri.parse('${account.webDavBaseUrl}$setlistPath');
+
+    try {
+      final res = await _client.delete(url, headers: _headers);
+      return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 404;
     } catch (_) {
       return false;
     }

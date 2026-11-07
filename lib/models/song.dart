@@ -85,6 +85,15 @@ class PartFile {
             : null,
         isDownloaded: json['isDownloaded'] as bool? ?? false,
       );
+
+  bool get isScoreOrConductor {
+    final lower = '$detectedInstrument $fileName'.toLowerCase();
+    return lower.contains('partitur') ||
+        lower.contains('direktion') ||
+        lower.contains('score') ||
+        lower.contains('conductor') ||
+        lower.contains('tutti');
+  }
 }
 
 /// Represents a musical piece / song folder on Nextcloud

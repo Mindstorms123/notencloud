@@ -250,6 +250,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     }
 
     try {
+      widget.nextcloudService!.ensureSetlistFolderExists().catchError((_) => false);
       final initialCount = _allSongs.length;
       final remoteSongs = await widget.nextcloudService!.scanLibrary(
         existingCachedSongs: _allSongs,

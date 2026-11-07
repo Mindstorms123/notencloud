@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -262,6 +263,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         await widget.storageService.saveAccount(account);
+        unawaited(NextcloudService(account).ensureSetlistFolderExists());
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -328,6 +330,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (isConnected) {
       await widget.storageService.saveAccount(account.copyWith(isValidated: true));
+      unawaited(service.ensureSetlistFolderExists());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

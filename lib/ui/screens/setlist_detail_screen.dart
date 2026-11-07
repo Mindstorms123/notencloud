@@ -8,6 +8,7 @@ import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
+import '../widgets/voice_selector_sheet.dart';
 import 'score_viewer_screen.dart';
 
 class SetlistDetailScreen extends StatefulWidget {
@@ -63,6 +64,16 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
   Future<void> _saveLocally() async {
     await widget.storageService.upsertSetlist(_setlist);
     widget.onSetlistUpdated(_setlist);
+    if (widget.nextcloudService != null) {
+      widget.nextcloudService!.uploadSetlist(_setlist).then((success) {
+        if (success && !_setlist.isSyncedWithCloud && mounted) {
+          setState(() {
+            _setlist = _setlist.copyWith(isSyncedWithCloud: true);
+          });
+          widget.storageService.upsertSetlist(_setlist);
+        }
+      }).catchError((_) {});
+    }
   }
 
   Future<void> _syncToNextcloud() async {
@@ -326,12 +337,45 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
       ),
     );
 
-    final bestMatch = VoiceMatcher.findBestMatch(song.parts, widget.profile);
+    final bestMatch = VoiceMatcher.findBestMatchForSong(song, widget.profile);
     if (bestMatch == null) {
+      if (song.parts.isNotEmpty) {
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: AppTheme.darkCard,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (ctx) => VoiceSelectorSheet(
+            song: song,
+            profile: widget.profile,
+            currentPart: song.parts.first,
+            onSelectPart: (selectedPart) {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (ctx) => ScoreViewerScreen(
+                    song: song,
+                    initialPart: selectedPart,
+                    profile: widget.profile,
+                    storageService: widget.storageService,
+                    annotationService: widget.annotationService,
+                    nextcloudService: widget.nextcloudService,
+                    currentSetlist: _setlist,
+                    setlistIndex: itemIndex,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppTheme.amber,
-          content: Text('Keine passende Stimme für "${widget.profile.displayName}" gefunden.'),
+          content: Text('Keine Notendateien für "${item.songTitle}" vorhanden.'),
         ),
       );
       return;
@@ -623,7 +667,7 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                         (s) => s.id == item.songId || s.folderName == item.songFolderName,
                         orElse: () => Song(id: item.songId, title: item.songTitle, folderName: item.songFolderName, remoteFolderPath: ''),
                       );
-                      final match = VoiceMatcher.findDetailedMatch(song.parts, widget.profile);
+                      final match = VoiceMatcher.findDetailedMatchForSong(song, widget.profile);
                       final bestMatch = match?.part;
                       final isFallback = match?.isFallback ?? false;
 
@@ -714,13 +758,35 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                                                   ),
                                                   child: Text(
                                                     isFallback
-                                                        ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
-                                                        : bestMatch.fileName,
+                                                        ? (widget.profile.instrument == 'Percussion' &&
+                                                                widget.profile.percussionInstrument.isNotEmpty &&
+                                                                widget.profile.percussionInstrument != 'Alle'
+                                                            ? 'Keine ${widget.profile.percussionInstrument} • Ersatz: ${bestMatch.fileName}'
+                                                            : (widget.profile.voiceNumber > 0
+                                                                ? 'Keine ${widget.profile.voiceNumber}. St. • Ersatz: ${bestMatch.fileName}'
+                                                                : 'Ersatz: ${bestMatch.fileName}'))
+                                                        : (song.isDocumentOrList ? 'Dokument / Liste (alle Stimmen)' : bestMatch.fileName),
                                                     style: TextStyle(
                                                       fontSize: 11,
                                                       color: isFallback
                                                           ? AppTheme.amber
                                                           : AppTheme.emerald,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                )
+                                              else
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.white.withValues(alpha: 0.08),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    'Keine ${widget.profile.displayName}',
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: AppTheme.darkTextMuted,
                                                       fontWeight: FontWeight.w600,
                                                     ),
                                                   ),

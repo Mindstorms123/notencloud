@@ -270,8 +270,32 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       ),
     );
 
-    final bestMatch = VoiceMatcher.findBestMatch(nextSong.parts, widget.profile);
+    final bestMatch = VoiceMatcher.findBestMatchForSong(nextSong, widget.profile);
     if (bestMatch == null) {
+      if (nextSong.parts.isNotEmpty) {
+        final fallbackPart = nextSong.parts.firstWhere(
+          (p) => p.isScoreOrConductor,
+          orElse: () => nextSong.parts.first,
+        );
+        setState(() {
+          _currentSetlistIndex = targetIndex;
+          _currentSong = nextSong;
+          _currentPart = fallbackPart;
+          _pageAnnotations.clear();
+          _currentPage = 1;
+          _baseFitZoom = null;
+          _isFitWidth = true;
+        });
+        _preparePdf();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.amber,
+            duration: const Duration(seconds: 2),
+            content: Text('Keine ${widget.profile.displayName} gefunden – zeige ${fallbackPart.fileName}'),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: AppTheme.amber,
