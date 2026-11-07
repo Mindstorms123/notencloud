@@ -131,11 +131,15 @@ class PageAnnotations {
   final int pageIndex;
   final List<Stroke> strokes;
   final List<TextNote> textNotes;
+  final DateTime? updatedAt;
+  final bool isSyncedWithCloud;
 
   const PageAnnotations({
     required this.pageIndex,
     this.strokes = const [],
     this.textNotes = const [],
+    this.updatedAt,
+    this.isSyncedWithCloud = false,
   });
 
   bool get isEmpty => strokes.isEmpty && textNotes.isEmpty;
@@ -143,17 +147,23 @@ class PageAnnotations {
   PageAnnotations copyWith({
     List<Stroke>? strokes,
     List<TextNote>? textNotes,
+    DateTime? updatedAt,
+    bool? isSyncedWithCloud,
   }) =>
       PageAnnotations(
         pageIndex: pageIndex,
         strokes: strokes ?? this.strokes,
         textNotes: textNotes ?? this.textNotes,
+        updatedAt: updatedAt ?? this.updatedAt,
+        isSyncedWithCloud: isSyncedWithCloud ?? this.isSyncedWithCloud,
       );
 
   Map<String, dynamic> toJson() => {
         'pageIndex': pageIndex,
         'strokes': strokes.map((s) => s.toJson()).toList(),
         'textNotes': textNotes.map((n) => n.toJson()).toList(),
+        if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+        'isSynced': isSyncedWithCloud,
       };
 
   factory PageAnnotations.fromJson(Map<String, dynamic> json) => PageAnnotations(
@@ -166,5 +176,9 @@ class PageAnnotations {
                 ?.map((n) => TextNote.fromJson(n as Map<String, dynamic>))
                 .toList() ??
             const [],
+        updatedAt: json['updatedAt'] != null
+            ? DateTime.tryParse(json['updatedAt'] as String)
+            : null,
+        isSyncedWithCloud: json['isSynced'] as bool? ?? false,
       );
 }

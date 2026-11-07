@@ -5,6 +5,7 @@ import 'package:xml/xml.dart' as xml;
 import '../models/nextcloud_account.dart';
 import '../models/song.dart';
 import '../models/setlist.dart';
+import '../models/annotation.dart';
 import 'voice_matcher.dart';
 
 class NextcloudService {
@@ -540,6 +541,103 @@ class NextcloudService {
       );
 
       return res.statusCode == 201 || res.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Ensures that all directory levels exist on Nextcloud, creating missing ones via MKCOL
+  Future<bool> ensureDirectoryExists(String relativePath) async {
+    final clean = relativePath.trim().replaceAll(RegExp(r'^/+|/+$'), '');
+    final segments = clean.split('/');
+    var currentPath = '';
+
+    for (final seg in segments) {
+      if (seg.isEmpty) continue;
+      currentPath += '/$seg';
+      final url = Uri.parse('${account.webDavBaseUrl}$currentPath');
+
+      try {
+        final req = http.Request('PROPFIND', url)
+          ..headers.addAll(_headers)
+          ..headers['Depth'] = '0';
+        final res = await _client.send(req);
+
+        if (res.statusCode == 404) {
+          final mkcolReq = http.Request('MKCOL', url)..headers.addAll(_headers);
+          final mkcolRes = await _client.send(mkcolReq);
+          if (mkcolRes.statusCode != 201 && mkcolRes.statusCode != 405) {
+            return false;
+          }
+        }
+      } catch (_) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  String _getUserAnnotationsDir(String songId) {
+    final safeUser = account.username.replaceAll(RegExp(r'[^\w\s-]'), '_');
+    final safeSongId = songId.replaceAll(RegExp(r'[^\w\s-]'), '_');
+    return '${account.cleanRootFolder}/_Notizen/$safeUser/$safeSongId';
+  }
+
+  /// Upload a user's page annotations to Nextcloud `_Notizen/<user>/<songId>/<partId>_p<page>.json`
+  Future<bool> uploadPageAnnotations(String songId, String partId, PageAnnotations annotations) async {
+    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
+    final userDir = _getUserAnnotationsDir(songId);
+    final ok = await ensureDirectoryExists(userDir);
+    if (!ok) return false;
+
+    final remoteFilePath = '$userDir/${safePartId}_p${annotations.pageIndex}.json';
+    final url = Uri.parse('${account.webDavBaseUrl}$remoteFilePath');
+    final content = jsonEncode(annotations.toJson());
+
+    try {
+      final res = await _client.put(
+        url,
+        headers: {
+          ..._headers,
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: utf8.encode(content),
+      );
+      return res.statusCode == 201 || res.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Download a user's page annotations from Nextcloud
+  Future<PageAnnotations?> downloadPageAnnotations(String songId, String partId, int pageIndex) async {
+    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
+    final userDir = _getUserAnnotationsDir(songId);
+    final remoteFilePath = '$userDir/${safePartId}_p$pageIndex.json';
+    final url = Uri.parse('${account.webDavBaseUrl}$remoteFilePath');
+
+    try {
+      final res = await _client.get(url, headers: _headers);
+      if (res.statusCode == 200) {
+        final map = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+        return PageAnnotations.fromJson(map).copyWith(isSyncedWithCloud: true);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Delete a user's page annotations from Nextcloud
+  Future<bool> deletePageAnnotations(String songId, String partId, int pageIndex) async {
+    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
+    final userDir = _getUserAnnotationsDir(songId);
+    final remoteFilePath = '$userDir/${safePartId}_p$pageIndex.json';
+    final url = Uri.parse('${account.webDavBaseUrl}$remoteFilePath');
+
+    try {
+      final res = await _client.delete(url, headers: _headers);
+      return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 404;
     } catch (_) {
       return false;
     }

@@ -63,6 +63,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   bool _isFullscreen = false;
   double? _baseFitZoom;
   bool _isFitWidth = true;
+  bool _isCloudSyncing = false;
+  bool _isCloudSynced = false;
 
   @override
   void initState() {
@@ -165,21 +167,59 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _currentSong.id,
       _currentPart.id,
       page,
+      nextcloudService: widget.nextcloudService,
     );
     if (mounted) {
       setState(() {
         _pageAnnotations[page] = ann;
+        if (ann.isSyncedWithCloud) _isCloudSynced = true;
       });
+    }
+
+    // Background check for newer cloud version
+    if (widget.nextcloudService != null && widget.nextcloudService!.account.isConfigured) {
+      widget.nextcloudService!.downloadPageAnnotations(
+        _currentSong.id,
+        _currentPart.id,
+        page,
+      ).then((cloudAnn) {
+        if (cloudAnn != null && mounted) {
+          final localTime = ann.updatedAt;
+          final cloudTime = cloudAnn.updatedAt;
+          if (localTime == null || (cloudTime != null && cloudTime.isAfter(localTime))) {
+            widget.annotationService.saveAnnotations(
+              _currentSong.id,
+              _currentPart.id,
+              cloudAnn,
+            );
+            setState(() {
+              _pageAnnotations[page] = cloudAnn;
+              _isCloudSynced = true;
+            });
+          }
+        }
+      }).catchError((_) {});
     }
   }
 
   Future<void> _saveCurrentAnnotations(int page, PageAnnotations ann) async {
-    _pageAnnotations[page] = ann;
-    await widget.annotationService.saveAnnotations(
+    final withTime = ann.copyWith(updatedAt: DateTime.now());
+    _pageAnnotations[page] = withTime;
+    if (widget.nextcloudService != null && widget.nextcloudService!.account.isConfigured) {
+      setState(() => _isCloudSyncing = true);
+    }
+    final ok = await widget.annotationService.saveAnnotations(
       _currentSong.id,
       _currentPart.id,
-      ann,
+      withTime,
+      nextcloudService: widget.nextcloudService,
     );
+    if (mounted) {
+      setState(() {
+        _isCloudSyncing = false;
+        if (ok) _isCloudSynced = true;
+      });
+    }
   }
 
   void _onAnnotationsChanged(PageAnnotations updated) {
@@ -652,6 +692,8 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                     activeTool: _activeTool,
                     activeColor: _activeColor,
                     activeStrokeWidth: _activeStrokeWidth,
+                    isCloudSyncing: _isCloudSyncing,
+                    isCloudSynced: _isCloudSynced,
                     onToggleDrawing: () {
                       setState(() {
                         _isDrawingActive = !_isDrawingActive;
@@ -699,10 +741,12 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                         _currentSong.id,
                         _currentPart.id,
                         _currentPage,
+                        nextcloudService: widget.nextcloudService,
                       );
                       setState(() {
                         _pageAnnotations[_currentPage] = PageAnnotations(pageIndex: _currentPage);
                         _undoHistory[_currentPage]?.clear();
+                        _isCloudSynced = true;
                       });
                     },
                   ),

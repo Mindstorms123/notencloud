@@ -13,6 +13,8 @@ class AnnotationToolbar extends StatelessWidget {
   final Function(Color) onSelectColor;
   final VoidCallback onUndo;
   final VoidCallback onClearPage;
+  final bool isCloudSyncing;
+  final bool isCloudSynced;
 
   const AnnotationToolbar({
     super.key,
@@ -25,6 +27,8 @@ class AnnotationToolbar extends StatelessWidget {
     required this.onSelectColor,
     required this.onUndo,
     required this.onClearPage,
+    this.isCloudSyncing = false,
+    this.isCloudSynced = false,
   });
 
   static const List<Color> penColors = [
@@ -202,6 +206,29 @@ class AnnotationToolbar extends StatelessWidget {
                       tooltip: 'Seite leeren',
                       onPressed: onClearPage,
                     ),
+
+                    // Cloud Sync Status Indicator
+                    if (isCloudSyncing) ...[
+                      const SizedBox(width: 4),
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.primaryLight,
+                        ),
+                      ),
+                    ] else if (isCloudSynced) ...[
+                      const SizedBox(width: 4),
+                      const Tooltip(
+                        message: 'Notizen in deiner Nextcloud gesichert',
+                        child: Icon(
+                          Icons.cloud_done_rounded,
+                          size: 18,
+                          color: AppTheme.emerald,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
