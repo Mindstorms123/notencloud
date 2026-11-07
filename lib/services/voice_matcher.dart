@@ -237,17 +237,18 @@ class VoiceMatcher {
     );
   }
 
-  /// Finds the best matching part file for a given song and profile
+  /// Finds the best matching part file for a given song and profile.
+  /// Returns null if no compatible part for this instrument/voice exists.
   static PartFile? findBestMatch(List<PartFile> parts, MusicianProfile profile) {
     if (parts.isEmpty) return null;
 
     final scored = parts
         .map((p) => scorePart(p, profile))
-        .where((r) => r.score > 30)
+        .where((r) => r.score >= 50)
         .toList();
 
     if (scored.isEmpty) {
-      return parts.first;
+      return null;
     }
 
     scored.sort((a, b) => b.score.compareTo(a.score));

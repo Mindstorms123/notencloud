@@ -6,6 +6,7 @@ import '../../services/annotation_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/voice_matcher.dart';
+import '../widgets/voice_selector_sheet.dart';
 import 'score_viewer_screen.dart';
 
 class RepertoireScreen extends StatefulWidget {
@@ -33,6 +34,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   bool _isSyncing = false;
   String? _syncMessage;
   String _selectedCategory = 'Alle';
+  bool _onlyMyVoice = false;
 
   @override
   void initState() {
@@ -67,6 +69,12 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
       _filteredSongs = _allSongs.where((song) {
         final matchesCat = _selectedCategory == 'Alle' || song.category == _selectedCategory;
         if (!matchesCat) return false;
+
+        if (_onlyMyVoice) {
+          final best = VoiceMatcher.findBestMatch(song.parts, widget.profile);
+          if (best == null) return false;
+        }
+
         if (query.isEmpty) return true;
         return song.title.toLowerCase().contains(query) ||
             song.folderName.toLowerCase().contains(query) ||
@@ -176,10 +184,38 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   }
 
   void _openSong(Song song) {
+    if (song.parts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keine Stimmen für dieses Stück verfügbar.')),
+      );
+      return;
+    }
+
     final bestMatch = VoiceMatcher.findBestMatch(song.parts, widget.profile);
     if (bestMatch == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keine Stimmen für dieses Stück gefunden.')),
+      // Open voice selector sheet so musician can pick any other part or score
+      showModalBottomSheet(
+        context: context,
+        builder: (ctx) => VoiceSelectorSheet(
+          song: song,
+          currentPart: song.parts.first,
+          profile: widget.profile,
+          onSelectPart: (part) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (ctx) => ScoreViewerScreen(
+                  song: song,
+                  initialPart: part,
+                  profile: widget.profile,
+                  storageService: widget.storageService,
+                  annotationService: widget.annotationService,
+                  nextcloudService: widget.nextcloudService,
+                ),
+              ),
+            );
+          },
+        ),
       );
       return;
     }
@@ -251,23 +287,38 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
 
           // Active Profile Banner
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             color: Theme.of(context).primaryColor.withOpacity(0.08),
             child: Row(
               children: [
                 Icon(Icons.person, size: 18, color: Theme.of(context).primaryColor),
                 const SizedBox(width: 8),
-                Text(
-                  'Aktive Stimme: ${widget.profile.displayName}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).primaryColor,
+                Expanded(
+                  child: Text(
+                    widget.profile.displayName,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).primaryColor,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                FilterChip(
+                  label: const Text('Nur meine', style: TextStyle(fontSize: 11)),
+                  selected: _onlyMyVoice,
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onSelected: (val) {
+                    setState(() {
+                      _onlyMyVoice = val;
+                      _onSearchChanged();
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  '${_filteredSongs.length} Stücke',
-                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                  '${_filteredSongs.length}',
+                  style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -375,52 +426,70 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                             song.title,
                             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                           ),
-                          subtitle: Row(
-                            children: [
-                              if (bestMatch != null) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.green.shade200),
-                                  ),
-                                  child: Text(
-                                    bestMatch.fileName,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.green.shade800,
-                                      fontWeight: FontWeight.w500,
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (bestMatch != null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.green.shade200),
+                                    ),
+                                    child: Text(
+                                      bestMatch.fileName,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.green.shade800,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Keine ${widget.profile.instrument}-Stimme',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade600,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              if (song.category.isNotEmpty) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.blue.shade200),
-                                  ),
-                                  child: Text(
-                                    song.category,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.blue.shade800,
-                                      fontWeight: FontWeight.w500,
+                                if (song.category.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.blue.shade200),
+                                    ),
+                                    child: Text(
+                                      song.category,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.blue.shade800,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ),
+                                Text(
+                                  '${song.parts.length} Stimmen',
+                                  style: const TextStyle(color: Colors.grey, fontSize: 11),
                                 ),
-                                const SizedBox(width: 6),
                               ],
-                              Text(
-                                '${song.parts.length} Stimmen',
-                                style: const TextStyle(color: Colors.grey, fontSize: 12),
-                              ),
-                            ],
+                            ),
                           ),
                           trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                           onTap: () => _openSong(song),
