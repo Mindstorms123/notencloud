@@ -60,12 +60,77 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   void initState() {
     super.initState();
     _currentSongs = List.from(widget.allSongs);
+    _loadSavedFilters();
     _recomputeReports();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  void _loadSavedFilters() {
+    final savedStatus = widget.storageService.getAuditStatusFilter();
+    if (savedStatus != null) {
+      _statusFilter = AuditStatusFilter.values.firstWhere(
+        (e) => e.name == savedStatus,
+        orElse: () => AuditStatusFilter.all,
+      );
+    }
+
+    final savedCat = widget.storageService.getAuditCategory();
+    if (savedCat != null) {
+      _selectedCategory = savedCat;
+    }
+
+    final savedInst = widget.storageService.getAuditInstrument();
+    if (savedInst != null) {
+      _selectedInstrument = savedInst;
+    }
+
+    final savedSort = widget.storageService.getAuditSortOption();
+    if (savedSort != null) {
+      _sortOption = AuditSortOption.values.firstWhere(
+        (e) => e.name == savedSort,
+        orElse: () => AuditSortOption.percentAsc,
+      );
+    }
+
+    final savedMode = widget.storageService.getAuditMode();
+    if (savedMode != null) {
+      _mode = AuditMode.values.firstWhere(
+        (e) => e.name == savedMode,
+        orElse: () => AuditMode.smartBesetzung,
+      );
+    }
+  }
+
+  void _setStatusFilter(AuditStatusFilter filter) {
+    setState(() => _statusFilter = filter);
+    widget.storageService.setAuditStatusFilter(filter.name);
+  }
+
+  void _setSelectedCategory(String cat) {
+    setState(() => _selectedCategory = cat);
+    widget.storageService.setAuditCategory(cat);
+  }
+
+  void _setSelectedInstrument(String inst) {
+    setState(() => _selectedInstrument = inst);
+    widget.storageService.setAuditInstrument(inst);
+  }
+
+  void _setSortOption(AuditSortOption opt) {
+    setState(() => _sortOption = opt);
+    widget.storageService.setAuditSortOption(opt.name);
+  }
+
+  void _setMode(AuditMode mode) {
+    setState(() {
+      _mode = mode;
+      _recomputeReports();
+    });
+    widget.storageService.setAuditMode(mode.name);
   }
 
   @override
@@ -946,12 +1011,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                 selected: _mode == AuditMode.smartBesetzung,
                 label: const Text('Smart-Besetzung (Auto)'),
                 onSelected: (sel) {
-                  if (sel) {
-                    setState(() {
-                      _mode = AuditMode.smartBesetzung;
-                      _recomputeReports();
-                    });
-                  }
+                  if (sel) _setMode(AuditMode.smartBesetzung);
                 },
               ),
               const SizedBox(width: 8),
@@ -959,12 +1019,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                 selected: _mode == AuditMode.standardBesetzung,
                 label: const Text('Klassisch (18 Kernstimmen)'),
                 onSelected: (sel) {
-                  if (sel) {
-                    setState(() {
-                      _mode = AuditMode.standardBesetzung;
-                      _recomputeReports();
-                    });
-                  }
+                  if (sel) _setMode(AuditMode.standardBesetzung);
                 },
               ),
               const SizedBox(width: 8),
@@ -972,12 +1027,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                 selected: _mode == AuditMode.vollbesetzung,
                 label: const Text('Großes Blasorchester'),
                 onSelected: (sel) {
-                  if (sel) {
-                    setState(() {
-                      _mode = AuditMode.vollbesetzung;
-                      _recomputeReports();
-                    });
-                  }
+                  if (sel) _setMode(AuditMode.vollbesetzung);
                 },
               ),
               const SizedBox(width: 8),
@@ -985,12 +1035,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                 selected: _mode == AuditMode.registerLuecken,
                 label: const Text('Nur Register-Lücken'),
                 onSelected: (sel) {
-                  if (sel) {
-                    setState(() {
-                      _mode = AuditMode.registerLuecken;
-                      _recomputeReports();
-                    });
-                  }
+                  if (sel) _setMode(AuditMode.registerLuecken);
                 },
               ),
             ],
@@ -1086,13 +1131,13 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
       children: [
         _buildStatItem('Stücke', '${_summary.totalSongs}', Colors.white,
             isSelected: _statusFilter == AuditStatusFilter.all,
-            onTap: () => setState(() => _statusFilter = AuditStatusFilter.all)),
+            onTap: () => _setStatusFilter(AuditStatusFilter.all)),
         _buildStatItem('Vollständig', '${_summary.completeSongs}', AppTheme.emerald,
             isSelected: _statusFilter == AuditStatusFilter.complete,
-            onTap: () => setState(() => _statusFilter = AuditStatusFilter.complete)),
+            onTap: () => _setStatusFilter(AuditStatusFilter.complete)),
         _buildStatItem('Unvollständig', '${_summary.incompleteSongs}', AppTheme.amber,
             isSelected: _statusFilter == AuditStatusFilter.incomplete,
-            onTap: () => setState(() => _statusFilter = AuditStatusFilter.incomplete)),
+            onTap: () => _setStatusFilter(AuditStatusFilter.incomplete)),
         _buildStatItem('Fehlt gesamt', '${_summary.totalMissingParts}', AppTheme.rose),
       ],
     );
@@ -1176,15 +1221,15 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                   return InkWell(
                     borderRadius: BorderRadius.circular(10),
                     onTap: () {
-                      setState(() {
-                        if (isSelected) {
-                          _selectedInstrument = 'Alle Instrumente';
-                        } else {
-                          _selectedInstrument = _instrumentsWithMissingParts.contains(root)
+                      if (isSelected) {
+                        _setSelectedInstrument('Alle Instrumente');
+                      } else {
+                        _setSelectedInstrument(
+                          _instrumentsWithMissingParts.contains(root)
                               ? root
-                              : 'Alle Instrumente';
-                        }
-                      });
+                              : 'Alle Instrumente',
+                        );
+                      }
                     },
                     child: Container(
                       width: 190,
@@ -1323,7 +1368,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
                   ),
                 ],
                 onChanged: (opt) {
-                  if (opt != null) setState(() => _sortOption = opt);
+                  if (opt != null) _setSortOption(opt);
                 },
               ),
             ),
@@ -1342,13 +1387,13 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: _selectedCategory,
+          value: _categories.contains(_selectedCategory) ? _selectedCategory : 'Alle Kategorien',
           isExpanded: true,
           dropdownColor: AppTheme.darkCard,
           style: const TextStyle(fontSize: 12, color: Colors.white),
           items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
           onChanged: (cat) {
-            if (cat != null) setState(() => _selectedCategory = cat);
+            if (cat != null) _setSelectedCategory(cat);
           },
         ),
       ),
@@ -1364,7 +1409,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: _selectedInstrument,
+          value: _instrumentsWithMissingParts.contains(_selectedInstrument) ? _selectedInstrument : 'Alle Instrumente',
           isExpanded: true,
           dropdownColor: AppTheme.darkCard,
           style: const TextStyle(fontSize: 12, color: Colors.white),
@@ -1372,7 +1417,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
               .map((i) => DropdownMenuItem(value: i, child: Text(i, overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: (inst) {
-            if (inst != null) setState(() => _selectedInstrument = inst);
+            if (inst != null) _setSelectedInstrument(inst);
           },
         ),
       ),

@@ -363,6 +363,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       final localPath = await widget.storageService.getLocalPdfPath(
         _currentSong.id,
         _currentPart.fileName,
+        part: _currentPart,
       );
 
       final file = File(localPath);

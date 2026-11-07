@@ -229,7 +229,11 @@ class SetlistPdfService {
 
       if (bestMatch != null) {
         try {
-          localPdfPath = await storageService.getLocalPdfPath(song.id, bestMatch.fileName);
+          localPdfPath = await storageService.getLocalPdfPath(
+            song.id,
+            bestMatch.fileName,
+            part: bestMatch,
+          );
           final file = File(localPdfPath);
           if (!await file.exists() && nextcloudService != null) {
             onProgress?.call(i + 1, totalItems, 'Lade Noten für "${song.title}"...');

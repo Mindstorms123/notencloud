@@ -19,6 +19,11 @@ class StorageService {
   static const _prefLastActiveCategoryKey = 'last_active_repertoire_category';
   static const _prefPedalSettingsKey = 'pedal_settings';
   static const _prefIgnoredPartsKey = 'ignored_missing_parts';
+  static const _prefAuditStatusFilterKey = 'audit_filter_status';
+  static const _prefAuditCategoryKey = 'audit_filter_category';
+  static const _prefAuditInstrumentKey = 'audit_filter_instrument';
+  static const _prefAuditSortOptionKey = 'audit_filter_sort_option';
+  static const _prefAuditModeKey = 'audit_filter_mode';
 
   final SharedPreferences _prefs;
 
@@ -28,6 +33,23 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     return StorageService(prefs);
   }
+
+  // --- Digitization Audit Filter Preferences ---
+
+  String? getAuditStatusFilter() => _prefs.getString(_prefAuditStatusFilterKey);
+  Future<void> setAuditStatusFilter(String value) => _prefs.setString(_prefAuditStatusFilterKey, value);
+
+  String? getAuditCategory() => _prefs.getString(_prefAuditCategoryKey);
+  Future<void> setAuditCategory(String value) => _prefs.setString(_prefAuditCategoryKey, value);
+
+  String? getAuditInstrument() => _prefs.getString(_prefAuditInstrumentKey);
+  Future<void> setAuditInstrument(String value) => _prefs.setString(_prefAuditInstrumentKey, value);
+
+  String? getAuditSortOption() => _prefs.getString(_prefAuditSortOptionKey);
+  Future<void> setAuditSortOption(String value) => _prefs.setString(_prefAuditSortOptionKey, value);
+
+  String? getAuditMode() => _prefs.getString(_prefAuditModeKey);
+  Future<void> setAuditMode(String value) => _prefs.setString(_prefAuditModeKey, value);
 
   // --- Category Preferences ---
 
@@ -102,7 +124,7 @@ class StorageService {
     return await getApplicationDocumentsDirectory();
   }
 
-  Future<String> getLocalPdfPath(String songId, String fileName) async {
+  Future<String> getLocalPdfPath(String songId, String fileName, {PartFile? part}) async {
     final docs = await getAppDocsDir();
     final safeSongId = songId.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final safeFileName = fileName.replaceAll(RegExp(r'[^\w\s-\.]'), '_');
@@ -110,7 +132,113 @@ class StorageService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    return '${dir.path}/$safeFileName';
+    final targetPath = '${dir.path}/$safeFileName';
+    final targetFile = File(targetPath);
+    if (await targetFile.exists()) {
+      return targetPath;
+    }
+
+    // Auto-migration & legacy resolver:
+    // If the exact target file doesn't exist yet, check if there's an older/alternate
+    // downloaded file in this song's directory that matches this part.
+    try {
+      final existingFiles = dir.listSync().whereType<File>().toList();
+      for (final f in existingFiles) {
+        if (!f.path.toLowerCase().endsWith('.pdf')) continue;
+        final base = f.path.split(Platform.pathSeparator).last;
+        if (base == safeFileName) continue;
+
+        // 1. Direct suffix match (e.g. "SongTitle - Trompete 1 in Bb.pdf" -> "Trompete 1 in Bb.pdf")
+        if (base.toLowerCase().endsWith(safeFileName.toLowerCase())) {
+          await f.rename(targetPath);
+          return targetPath;
+        }
+
+        // 2. VoiceMatcher parsed match
+        final expected = part ?? VoiceMatcher.parsePartFileName(fileName, songId, '');
+        if (expected.detectedInstrument.isNotEmpty && expected.detectedInstrument != 'Zusatzstimme') {
+          final candidate = VoiceMatcher.parsePartFileName(base, songId, '');
+          if (candidate.detectedInstrument == expected.detectedInstrument) {
+            final voiceMatches = candidate.detectedVoice == expected.detectedVoice ||
+                (expected.detectedVoice <= 1 && candidate.detectedVoice <= 1);
+            if (voiceMatches) {
+              await f.rename(targetPath);
+              return targetPath;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return targetPath;
+  }
+
+  /// Checks if a part is already downloaded locally, resolving legacy filenames if needed.
+  Future<bool> isPartDownloaded(String songId, String fileName, {PartFile? part}) async {
+    try {
+      final path = await getLocalPdfPath(songId, fileName, part: part);
+      return await File(path).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Scans offline score directories to rename legacy files and delete redundant duplicates.
+  Future<int> migrateAndDeduplicateScores(List<Song> songs) async {
+    int count = 0;
+    try {
+      final docs = await getAppDocsDir();
+      final scoresDir = Directory('${docs.path}/scores');
+      if (!await scoresDir.exists()) return 0;
+
+      for (final song in songs) {
+        final safeSongId = song.id.replaceAll(RegExp(r'[^\w\s-]'), '_');
+        final songDir = Directory('${scoresDir.path}/$safeSongId');
+        if (!await songDir.exists()) continue;
+
+        final existingFiles = songDir.listSync().whereType<File>().toList();
+        final pdfFiles = existingFiles.where((f) => f.path.toLowerCase().endsWith('.pdf')).toList();
+        if (pdfFiles.isEmpty) continue;
+
+        for (final part in song.parts) {
+          final safeFileName = part.fileName.replaceAll(RegExp(r'[^\w\s-\.]'), '_');
+          final targetPath = '${songDir.path}/$safeFileName';
+          final targetFile = File(targetPath);
+          final targetExists = await targetFile.exists();
+
+          for (final f in List<File>.from(pdfFiles)) {
+            final base = f.path.split(Platform.pathSeparator).last;
+            if (base == safeFileName) continue;
+
+            final isCandidate = base.toLowerCase().endsWith(safeFileName.toLowerCase()) ||
+                (() {
+                  final parsed = VoiceMatcher.parsePartFileName(base, song.id, '');
+                  return parsed.detectedInstrument == part.detectedInstrument &&
+                      (parsed.detectedVoice == part.detectedVoice ||
+                          (part.detectedVoice <= 1 && parsed.detectedVoice <= 1));
+                })();
+
+            if (isCandidate) {
+              if (targetExists) {
+                try {
+                  await f.delete();
+                  pdfFiles.remove(f);
+                  count++;
+                } catch (_) {}
+              } else {
+                try {
+                  await f.rename(targetPath);
+                  pdfFiles.remove(f);
+                  count++;
+                  break;
+                } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return count;
   }
 
   // --- Cached Songs Index ---

@@ -42,6 +42,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   late String _selectedCategory;
   bool _onlyMyVoice = false;
   late MusicianProfile _activeProfile;
+  Set<String> _downloadedSongIds = {};
 
   @override
   void initState() {
@@ -66,6 +67,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         _activeProfile = widget.profile;
         _onSearchChanged();
       });
+      _checkOfflineStatus();
     }
   }
 
@@ -73,6 +75,28 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkOfflineStatus() async {
+    final downloaded = <String>{};
+    for (final song in _allSongs) {
+      final match = VoiceMatcher.findBestMatchForSong(song, _activeProfile);
+      if (match != null) {
+        final isDown = await widget.storageService.isPartDownloaded(
+          song.id,
+          match.fileName,
+          part: match,
+        );
+        if (isDown) {
+          downloaded.add(song.id);
+        }
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _downloadedSongIds = downloaded;
+      });
+    }
   }
 
   void _loadLocalSongs() {
@@ -98,6 +122,10 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         _selectedCategory = 'Alle';
       }
       _onSearchChanged();
+    });
+    _checkOfflineStatus();
+    widget.storageService.migrateAndDeduplicateScores(_allSongs).then((_) {
+      if (mounted) _checkOfflineStatus();
     });
   }
 
@@ -142,6 +170,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
             _onlyMyVoice = onlyMyVoice;
             _onSearchChanged();
           });
+          _checkOfflineStatus();
           if (savePermanently) {
             await widget.storageService.saveProfile(updatedProfile);
             widget.onProfileUpdated?.call(updatedProfile);
@@ -275,6 +304,7 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
           _isBackgroundSyncing = false;
           _syncMessage = null;
         });
+        _checkOfflineStatus();
 
         if (!isBackground) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -318,70 +348,122 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
   }
 
   Future<void> _downloadAllForOffline() async {
-    if (widget.nextcloudService == null) return;
+    if (widget.nextcloudService == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keine Verbindung zu Nextcloud vorhanden.')),
+      );
+      return;
+    }
 
-    int total = _allSongs.length;
+    // Filter songs that have a matching part for the active profile
+    final relevantSongs = _allSongs
+        .where((s) => VoiceMatcher.findBestMatchForSong(s, _activeProfile) != null)
+        .toList();
+
+    if (relevantSongs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keine Stücke für dieses Instrument gefunden.')),
+      );
+      return;
+    }
+
+    final total = relevantSongs.length;
     int current = 0;
+    int alreadyDownloaded = 0;
+    int newlyDownloaded = 0;
+    String currentTitle = 'Prüfe Noten...';
+    void Function(void Function())? dialogSetState;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AppTheme.darkCard,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.offline_pin_rounded, color: AppTheme.emerald),
-              SizedBox(width: 10),
-              Text('Bühnen-Download', style: TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: total > 0 ? current / total : 0,
-                  backgroundColor: AppTheme.darkSurface,
-                  color: AppTheme.emerald,
-                  minHeight: 8,
+        builder: (ctx, setDialogState) {
+          dialogSetState = setDialogState;
+          return AlertDialog(
+            backgroundColor: AppTheme.darkCard,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Row(
+              children: [
+                Icon(Icons.offline_pin_rounded, color: AppTheme.emerald),
+                SizedBox(width: 10),
+                Text('Bühnen-Download', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: total > 0 ? current / total : 0,
+                    backgroundColor: AppTheme.darkSurface,
+                    color: AppTheme.emerald,
+                    minHeight: 8,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '$current von $total Stücken heruntergeladen...',
-                style: const TextStyle(color: AppTheme.darkTextSecondary, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
+                const SizedBox(height: 16),
+                Text(
+                  '$current von $total Stücken geprüft...',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$alreadyDownloaded bereits offline • $newlyDownloaded neu geladen',
+                  style: const TextStyle(color: AppTheme.darkTextSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  currentTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppTheme.primaryLight, fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
 
-    for (final song in _allSongs) {
-      final bestMatch = VoiceMatcher.findBestMatchForSong(song, widget.profile);
+    for (final song in relevantSongs) {
+      final bestMatch = VoiceMatcher.findBestMatchForSong(song, _activeProfile);
+      current++;
+      currentTitle = song.title;
+      dialogSetState?.call(() {});
+
       if (bestMatch != null) {
         try {
           final localPath = await widget.storageService.getLocalPdfPath(
             song.id,
             bestMatch.fileName,
+            part: bestMatch,
           );
-          if (!await File(localPath).exists()) {
+          if (await File(localPath).exists()) {
+            alreadyDownloaded++;
+          } else {
             await widget.nextcloudService!.downloadPart(bestMatch, localPath);
+            newlyDownloaded++;
           }
         } catch (_) {}
       }
-      current++;
+      dialogSetState?.call(() {});
     }
 
     if (mounted) {
-      Navigator.pop(context);
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      await _checkOfflineStatus();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           backgroundColor: AppTheme.emerald,
-          content: Text('Alle Stimmen für Offline-Betrieb heruntergeladen!'),
+          content: Text(
+            newlyDownloaded > 0
+                ? '$newlyDownloaded neue Stücke heruntergeladen ($alreadyDownloaded waren bereits offline).'
+                : 'Alle $alreadyDownloaded Stücke sind bereits vollständig offline verfügbar!',
+          ),
         ),
       );
     }
@@ -420,7 +502,9 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                   nextcloudService: widget.nextcloudService,
                 ),
               ),
-            );
+            ).then((_) {
+              if (mounted) _checkOfflineStatus();
+            });
           },
         ),
       );
@@ -439,7 +523,9 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
           nextcloudService: widget.nextcloudService,
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) _checkOfflineStatus();
+    });
   }
 
   @override
@@ -982,6 +1068,39 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                                                         ? AppTheme.darkTextMuted
                                                         : Colors.grey.shade600,
                                                   ),
+                                                ),
+                                              ),
+
+                                            // Offline Downloaded Badge
+                                            if (_downloadedSongIds.contains(song.id))
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.emerald.withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: AppTheme.emerald.withValues(alpha: 0.3),
+                                                  ),
+                                                ),
+                                                child: const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.offline_pin_rounded,
+                                                      size: 11,
+                                                      color: AppTheme.emerald,
+                                                    ),
+                                                    SizedBox(width: 3),
+                                                    Text(
+                                                      'Offline',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: AppTheme.emerald,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
 

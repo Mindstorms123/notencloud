@@ -445,6 +445,71 @@ void main() {
       expect(find.text('Incomplete Polka'), findsOneWidget);
     });
 
+    testWidgets('DigitizationAuditScreen remembers and restores filter selections from storageService', (tester) async {
+      final storageService = await StorageService.init();
+
+      // Pre-seed storageService with saved filters
+      await storageService.setAuditStatusFilter(AuditStatusFilter.complete.name);
+      await storageService.setAuditCategory('Rock');
+      await storageService.setAuditSortOption(AuditSortOption.nameDesc.name);
+      await storageService.setAuditMode(AuditMode.standardBesetzung.name);
+
+      final completeRock = createSampleSong(
+        title: 'Complete Rock Song',
+        category: 'Rock',
+        fileNames: [
+          'Partitur.pdf',
+          'Flöte 1 in C.pdf',
+          'Flöte 2 in C.pdf',
+          'Klarinette 1 in Bb.pdf',
+          'Klarinette 2 in Bb.pdf',
+          'Altsaxophon 1 in Eb.pdf',
+          'Altsaxophon 2 in Eb.pdf',
+          'Tenorsaxophon 1 in Bb.pdf',
+          'Trompete 1 in Bb.pdf',
+          'Trompete 2 in Bb.pdf',
+          'Flügelhorn 1 in Bb.pdf',
+          'Waldhorn 1 in F.pdf',
+          'Waldhorn 2 in F.pdf',
+          'Tenorhorn 1 in Bb.pdf',
+          'Bariton in C.pdf',
+          'Posaune 1 in C.pdf',
+          'Posaune 2 in C.pdf',
+          'Tuba 1 in C.pdf',
+          'Percussion.pdf',
+        ],
+      );
+
+      final incompletePolka = createSampleSong(
+        title: 'Incomplete Polka',
+        category: 'Polka',
+        fileNames: ['Trompete 1 in Bb.pdf'],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DigitizationAuditScreen(
+            allSongs: [completeRock, incompletePolka],
+            storageService: storageService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Because 'complete' was saved, only completeRock is visible, not incompletePolka
+      expect(find.text('Complete Rock Song'), findsOneWidget);
+      expect(find.text('Incomplete Polka'), findsNothing);
+
+      // Verify category dropdown restored 'Rock'
+      expect(find.text('Rock'), findsWidgets);
+
+      // Now change status filter to 'all' and verify it persists in storageService
+      await tester.tap(find.text('Stücke'));
+      await tester.pumpAndSettle();
+
+      expect(storageService.getAuditStatusFilter(), AuditStatusFilter.all.name);
+    });
+
     testWidgets('renders cleanly in landscape orientation and with virtual keyboard without overflow', (tester) async {
       final storageService = await StorageService.init();
 

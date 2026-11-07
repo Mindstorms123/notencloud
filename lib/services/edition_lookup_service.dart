@@ -69,11 +69,11 @@ class EditionLookupService {
     'aladdin': const EditionInfo(
       title: 'Aladdin',
       publisher: 'Hal Leonard',
-      arranger: 'John Moss / Michael Sweeney',
+      arranger: 'Michael Sweeney',
       series: 'Discovery Plus Band',
-      orderNumber: '04005048',
-      directUrl: 'https://www.halleonard.com/product/4005048',
-      instrumentationNote: 'Original-Besetzung: Flöte, Klarinette 1-3, Altsax 1-2, Tenorsax, Barisax, Trompete 1-2, F-Horn (1 Part), Posaune, Bariton, Tuba, Percussion. Kein Flügelhorn, kein Horn 2-4 im Original.',
+      orderNumber: '08724542',
+      directUrl: 'https://www.halleonard.com/product/8724542/aladdin-highlights-from',
+      instrumentationNote: 'Original-Besetzung Discovery Plus Band: Flöte, Oboe, Fagott, Klarinette 1-2, Altsax 1-2, Tenorsax, Barisax, Trompete 1-2, F-Horn (1 Part), Posaune, Bariton, Tuba, Percussion. Kein Flügelhorn, kein Horn 2-4 im Original.',
       naturallyMissingInstruments: ['Flügelhorn', 'Waldhorn 2', 'Waldhorn 3', 'Waldhorn 4', 'Trompete 3', 'Posaune 2', 'Posaune 3'],
     ),
     'avengers endgame': const EditionInfo(
@@ -302,9 +302,10 @@ class EditionLookupService {
       title: 'Don\'t Stop Believin\'',
       publisher: 'Woodstock Music',
       arranger: 'Manfred Hirtenlehner',
-      series: 'Selected Edition (Woodstock der Blasmusik)',
-      directUrl: 'https://woodstockmusic.at/products/dont-stop-believin-blasorchester-fassung',
-      instrumentationNote: 'Vollständige österreichische Blasorchesterbesetzung: Flöte 1-2, Oboe, Klarinette Es, Klarinette 1-3, Bassklarinette, Fagott, Altsax 1-2, Tenorsax 1-2, Baritonsax, Flügelhorn 1-2, Trompete 1-3, Tenorhorn, Bariton, Horn 1-4, Posaune 1-3, Tuba 1-2, Glockenspiel, Vibraphon, Schlagzeug.',
+      series: 'Selected Edition (Woodstock der Blasmusik WM 0103)',
+      // Kein direkter Link wegen Cloudflare-Rate-Limiting (HTTP 429) auf woodstockmusic.at
+      directUrl: null,
+      instrumentationNote: 'Vollständige österreichische Blasorchesterbesetzung (Woodstock Music WM 0103, Arr. Manfred Hirtenlehner): Flöte 1-2, Oboe, Klarinette Es, Klarinette 1-3, Bassklarinette, Fagott, Altsax 1-2, Tenorsax 1-2, Baritonsax, Flügelhorn 1-2, Trompete 1-3, Tenorhorn, Bariton, Horn 1-4, Posaune 1-3, Tuba 1-2, Glockenspiel, Vibraphon, Schlagzeug.',
     ),
     'sweet caroline': const EditionInfo(
       title: 'Sweet Caroline',
@@ -414,7 +415,7 @@ class EditionLookupService {
       publisher: 'Editions Marc Reift',
       arranger: 'Jirka Kadlec',
       orderNumber: 'EMR 35895',
-      directUrl: 'https://reift.ch/en/emr/EMR%2035895',
+      directUrl: 'https://www.sheetmusicdownload.eu/de/artikel/paul-mccartney-john-lennon/editions-marc-reift/and-i-love-her.38004',
       instrumentationNote: 'Editions Marc Reift 5-Part Ensemble: 5 flexible Hauptstimmen + Percussion. Kein deutsches Flügelhorn.',
       naturallyMissingInstruments: ['Flügelhorn'],
     ),
@@ -423,21 +424,25 @@ class EditionLookupService {
       publisher: 'Editions Marc Reift',
       arranger: 'Jirka Kadlec',
       orderNumber: 'EMR 12822',
-      directUrl: 'https://reift.ch/en/emr/EMR%2012822',
+      directUrl: 'https://reift.ch/de/emr/12822',
       instrumentationNote: 'Editions Marc Reift Blasorchesterfassung EMR 12822.',
     ),
     'ticket to ride': const EditionInfo(
       title: 'Ticket To Ride',
       publisher: 'Editions Marc Reift',
+      arranger: 'Jirka Kadlec',
       orderNumber: 'EMR 36200',
-      directUrl: 'https://reift.ch/en/emr/EMR%2036200',
+      directUrl: 'https://www.sheetmusicdownload.eu/de/artikel/jirka-kadlec/editions-marc-reift/ticket-to-ride.57601',
+      instrumentationNote: 'Editions Marc Reift 5-Part Ensemble EMR 36200.',
     ),
     'you\'ll never walk alone': const EditionInfo(
       title: 'You\'ll Never Walk Alone',
       publisher: 'Editions Marc Reift',
       arranger: 'John Glenesk Mortimer',
-      orderNumber: 'EMR 9507',
-      directUrl: 'https://reift.ch/en/emr/EMR%209507',
+      series: 'Concert Band / Blasorchester',
+      orderNumber: 'EMR 11917',
+      directUrl: 'https://reift.ch/de/emr/11917',
+      instrumentationNote: 'Editions Marc Reift Originalpartitur EMR 11917 (Arr. John Glenesk Mortimer).',
     ),
     'oblivion': const EditionInfo(
       title: 'Oblivion',
@@ -451,37 +456,39 @@ class EditionLookupService {
       publisher: 'Editions Marc Reift',
       arranger: 'Jérôme Naulais',
       orderNumber: 'EMR 5441',
-      directUrl: 'https://reift.ch/en/emr/EMR%205441',
+      directUrl: 'https://reift.ch/de/emr/5441',
     ),
     'el choclo': const EditionInfo(
       title: 'El Choclo',
       publisher: 'Editions Marc Reift',
       arranger: 'Jérôme Naulais',
       orderNumber: 'EMR 21806',
-      directUrl: 'https://reift.ch/en/emr/EMR%2021806',
+      directUrl: 'https://reift.ch/de/emr/21806',
     ),
     'here\'s to you': const EditionInfo(
       title: 'Here\'s To You',
       publisher: 'Editions Marc Reift',
       arranger: 'John Glenesk Mortimer',
       orderNumber: 'EMR 11908',
-      directUrl: 'https://reift.ch/en/emr/EMR%2011908',
+      directUrl: 'https://reift.ch/de/emr/11908',
     ),
     'i will survive': const EditionInfo(
       title: 'I Will Survive',
       publisher: 'Editions Marc Reift',
       arranger: 'John Glenesk Mortimer',
-      orderNumber: 'EMR 10090',
-      directUrl: 'https://reift.ch/en/emr/EMR%2010090',
+      series: 'Concert Band / Blasorchester',
+      orderNumber: 'EMR 1676S',
+      directUrl: 'https://reift.ch/de/emr/1676S',
+      instrumentationNote: 'Editions Marc Reift Originalpartitur EMR 1676S (Arr. John Glenesk Mortimer).',
     ),
     'the mandalorian': const EditionInfo(
       title: 'The Mandalorian',
       publisher: 'Hal Leonard',
       arranger: 'Paul Murtha',
-      series: 'Discovery Plus Band',
-      orderNumber: '04006612',
-      directUrl: 'https://www.halleonard.com/product/4006612',
-      instrumentationNote: 'Hal Leonard Discovery Plus: Flöte, Klarinetten 1-2, Altsax 1-2, Tenorsax, Trompeten 1-2, F-Horn, Posaune, Bariton, Tuba, Percussion. Ohne Flügelhorn.',
+      series: 'Young Concert Band',
+      orderNumber: '04006608',
+      directUrl: 'https://www.halleonard.com/product/4006608',
+      instrumentationNote: 'Hal Leonard Young Concert Band (HL 04006608): Flöte, Oboe, Fagott, Klarinetten 1-3, Bassklarinette, Altsax 1-2, Tenorsax, Barisax, Trompeten 1-2, Horn in F, Posaune 1-2, Bariton, Tuba, Percussion. Ohne Flügelhorn.',
       naturallyMissingInstruments: ['Flügelhorn', 'Waldhorn 2', 'Waldhorn 3', 'Waldhorn 4', 'Trompete 3', 'Posaune 2', 'Posaune 3'],
     ),
     'star wars the force awakens': const EditionInfo(
@@ -498,14 +505,24 @@ class EditionLookupService {
 
   /// Returns known edition info for a song title or null if not specifically cataloged
   static EditionInfo? getEdition(String songTitle) {
-    final clean = songTitle.toLowerCase().trim();
+    var clean = songTitle.toLowerCase().trim();
+    clean = clean.replaceFirst(RegExp(r'^\d+\s*[\._\-]+\s*'), '').trim();
+    clean = clean.replaceFirst(RegExp(r'^0\d+\s+'), '').trim();
+
     if (_catalog.containsKey(clean)) {
       return _catalog[clean];
     }
 
-    // Try partial match
+    final normClean = clean.replaceAll(RegExp(r'[^a-z0-9]'), '');
     for (final entry in _catalog.entries) {
-      if (clean.contains(entry.key) || entry.key.contains(clean)) {
+      final normKey = entry.key.replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (normClean == normKey) {
+        return entry.value;
+      }
+    }
+
+    for (final entry in _catalog.entries) {
+      if (entry.key.length >= 6 && clean.contains(entry.key)) {
         return entry.value;
       }
     }
