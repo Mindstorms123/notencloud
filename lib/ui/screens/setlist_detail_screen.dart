@@ -8,6 +8,7 @@ import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/voice_matcher.dart';
 import '../theme/app_theme.dart';
+import '../widgets/setlist_export_sheet.dart';
 import '../widgets/voice_selector_sheet.dart';
 import 'score_viewer_screen.dart';
 
@@ -36,6 +37,7 @@ class SetlistDetailScreen extends StatefulWidget {
 class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
   late Setlist _setlist;
   bool _isSavingToCloud = false;
+  bool _isEditing = false;
 
   @override
   void initState() {
@@ -45,9 +47,13 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
 
   void _onReorderItem(int oldIndex, int newIndex) {
     setState(() {
+      var adjustedNewIndex = newIndex;
+      if (oldIndex < adjustedNewIndex) {
+        adjustedNewIndex -= 1;
+      }
       final items = List<SetlistItem>.from(_setlist.items);
       final item = items.removeAt(oldIndex);
-      items.insert(newIndex, item);
+      items.insert(adjustedNewIndex, item);
 
       final reindexed = items.asMap().entries.map((e) {
         return e.value.copyWith(order: e.key + 1);
@@ -59,6 +65,78 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
       );
     });
     _saveLocally();
+  }
+
+  void _deleteItemAt(int index) {
+    if (index < 0 || index >= _setlist.items.length) return;
+    final removedItem = _setlist.items[index];
+    final removedIndex = index;
+
+    setState(() {
+      final items = List<SetlistItem>.from(_setlist.items)..removeAt(index);
+      final reindexed = items.asMap().entries.map((e) {
+        return e.value.copyWith(order: e.key + 1);
+      }).toList();
+      _setlist = _setlist.copyWith(
+        items: reindexed,
+        updatedAt: DateTime.now(),
+      );
+    });
+    _saveLocally();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF2D2E30),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AppTheme.darkBorder),
+          ),
+          content: Row(
+            children: [
+              Icon(
+                removedItem.isIntermission ? Icons.coffee_rounded : Icons.music_note_rounded,
+                color: AppTheme.amber,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  removedItem.isIntermission
+                      ? 'Pause entfernt'
+                      : '"${removedItem.songTitle}" entfernt',
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          action: SnackBarAction(
+            label: 'ZURÜCKHOLEN',
+            textColor: AppTheme.amber,
+            onPressed: () {
+              setState(() {
+                final items = List<SetlistItem>.from(_setlist.items);
+                final insertAt = removedIndex.clamp(0, items.length);
+                items.insert(insertAt, removedItem);
+                final reindexed = items.asMap().entries.map((e) {
+                  return e.value.copyWith(order: e.key + 1);
+                }).toList();
+                _setlist = _setlist.copyWith(
+                  items: reindexed,
+                  updatedAt: DateTime.now(),
+                );
+              });
+              _saveLocally();
+            },
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _saveLocally() async {
@@ -470,6 +548,45 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
           ],
         ),
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: _isEditing ? Colors.white : AppTheme.primaryLight,
+                backgroundColor: _isEditing
+                    ? AppTheme.emerald
+                    : AppTheme.primary.withValues(alpha: 0.15),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                setState(() {
+                  _isEditing = !_isEditing;
+                });
+              },
+              icon: Icon(
+                _isEditing ? Icons.check_rounded : Icons.edit_rounded,
+                size: 16,
+              ),
+              label: Text(
+                _isEditing ? 'Fertig' : 'Bearbeiten',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.share_rounded),
+            tooltip: 'Als PDF teilen / Aushilfe',
+            onPressed: () {
+              SetlistExportSheet.show(
+                context,
+                setlist: _setlist,
+                currentProfile: widget.profile,
+                storageService: widget.storageService,
+                nextcloudService: widget.nextcloudService,
+              );
+            },
+          ),
           IconButton(
             icon: _isSavingToCloud
                 ? const SizedBox(
@@ -481,12 +598,50 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
             tooltip: 'Auf Nextcloud veröffentlichen',
             onPressed: _isSavingToCloud ? null : _syncToNextcloud,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
+          // Edit Mode Banner
+          if (_isEditing)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.mode_edit_outline_rounded, size: 18, color: AppTheme.primaryLight),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Bearbeitungsmodus aktiv: Stücke sortieren oder mit [–] entfernen.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.darkTextPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _isEditing = false),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(50, 30),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Fertig', style: TextStyle(color: AppTheme.emerald, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+
           // Stage Mode Hero Banner
-          if (_setlist.items.isNotEmpty)
+          if (_setlist.items.isNotEmpty && !_isEditing)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: InkWell(
@@ -600,6 +755,7 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                     ),
                   )
                 : ReorderableListView.builder(
+                    buildDefaultDragHandles: false,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: _setlist.items.length,
                     onReorderItem: _onReorderItem,
@@ -607,48 +763,69 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                       final item = _setlist.items[index];
 
                       if (item.isIntermission) {
-                        return Container(
+                        return Dismissible(
                           key: ValueKey(item.id),
-                          margin: const EdgeInsets.symmetric(vertical: 5),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.amber.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppTheme.amber.withValues(alpha: 0.35)),
+                          direction: _isEditing ? DismissDirection.endToStart : DismissDirection.none,
+                          background: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.rose.withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20),
+                            child: const Icon(Icons.delete_rounded, color: Colors.white),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.amber.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
+                          onDismissed: (_) => _deleteItemAt(index),
+                          child: Container(
+                            key: ValueKey(item.id),
+                            margin: const EdgeInsets.symmetric(vertical: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.amber.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppTheme.amber.withValues(alpha: 0.35)),
+                            ),
+                            child: Row(
+                              children: [
+                                if (_isEditing) ...[
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_rounded, color: AppTheme.rose, size: 22),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                    onPressed: () => _deleteItemAt(index),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.amber.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.coffee_rounded, color: AppTheme.amber, size: 18),
                                 ),
-                                child: const Icon(Icons.coffee_rounded, color: AppTheme.amber, size: 18),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'PAUSE / DURCHATMEN',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  letterSpacing: 0.5,
-                                  color: AppTheme.amber,
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'PAUSE / DURCHATMEN',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    letterSpacing: 0.5,
+                                    color: AppTheme.amber,
+                                  ),
                                 ),
-                              ),
-                              const Spacer(),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppTheme.darkTextMuted),
-                                onPressed: () {
-                                  setState(() {
-                                    final items = List<SetlistItem>.from(_setlist.items)..removeAt(index);
-                                    _setlist = _setlist.copyWith(items: items);
-                                  });
-                                  _saveLocally();
-                                },
-                              ),
-                              const Icon(Icons.drag_indicator_rounded, color: AppTheme.darkTextMuted),
-                            ],
+                                const Spacer(),
+                                if (_isEditing)
+                                  ReorderableDragStartListener(
+                                    index: index,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Icon(Icons.drag_indicator_rounded, color: AppTheme.darkTextMuted),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         );
                       }
@@ -664,7 +841,7 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
 
                       return Dismissible(
                         key: ValueKey(item.id),
-                        direction: DismissDirection.endToStart,
+                        direction: _isEditing ? DismissDirection.endToStart : DismissDirection.none,
                         background: Container(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           decoration: BoxDecoration(
@@ -675,29 +852,37 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                           padding: const EdgeInsets.only(right: 20),
                           child: const Icon(Icons.delete_rounded, color: Colors.white),
                         ),
-                        onDismissed: (direction) {
-                          setState(() {
-                            final items = List<SetlistItem>.from(_setlist.items)..removeAt(index);
-                            _setlist = _setlist.copyWith(items: items);
-                          });
-                          _saveLocally();
-                        },
+                        onDismissed: (_) => _deleteItemAt(index),
                         child: Container(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           decoration: BoxDecoration(
                             color: AppTheme.darkCard,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppTheme.darkBorder),
+                            border: Border.all(
+                              color: _isEditing
+                                  ? AppTheme.primary.withValues(alpha: 0.3)
+                                  : AppTheme.darkBorder,
+                            ),
                           ),
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(14),
-                              onTap: () => _openSongAt(index),
+                              onTap: _isEditing ? null : () => _openSongAt(index),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                 child: Row(
                                   children: [
+                                    if (_isEditing) ...[
+                                      IconButton(
+                                        icon: const Icon(Icons.remove_circle_rounded,
+                                            color: AppTheme.rose, size: 22),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                        onPressed: () => _deleteItemAt(index),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
                                     // Order Badge
                                     Container(
                                       width: 32,
@@ -850,7 +1035,14 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                                       tooltip: 'Notiz',
                                       onPressed: () => _editItemNotes(item),
                                     ),
-                                    const Icon(Icons.drag_indicator_rounded, color: AppTheme.darkTextMuted),
+                                    if (_isEditing)
+                                      ReorderableDragStartListener(
+                                        index: index,
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(8.0),
+                                          child: Icon(Icons.drag_indicator_rounded, color: AppTheme.darkTextMuted),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),

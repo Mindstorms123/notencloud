@@ -6,6 +6,7 @@ import '../../services/annotation_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/setlist_export_sheet.dart';
 import 'setlist_detail_screen.dart';
 
 class SetlistsScreen extends StatefulWidget {
@@ -116,6 +117,46 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
         widget.nextcloudService!.deleteSetlist(setlist.id).catchError((_) => false);
       }
       _loadSetlists();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF2D2E30),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: AppTheme.darkBorder),
+            ),
+            content: Row(
+              children: [
+                const Icon(Icons.event_note_rounded, color: AppTheme.amber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Setlist "${setlist.title}" gelöscht',
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            action: SnackBarAction(
+              label: 'ZURÜCKHOLEN',
+              textColor: AppTheme.amber,
+              onPressed: () async {
+                await widget.storageService.upsertSetlist(setlist);
+                if (widget.nextcloudService != null && setlist.isSyncedWithCloud) {
+                  widget.nextcloudService!.uploadSetlist(setlist).catchError((_) => false);
+                }
+                _loadSetlists();
+              },
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -464,11 +505,29 @@ class _SetlistsScreenState extends State<SetlistsScreen> {
                             color: AppTheme.darkCard,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             onSelected: (val) {
-                              if (val == 'delete') {
+                              if (val == 'share') {
+                                SetlistExportSheet.show(
+                                  context,
+                                  setlist: setlist,
+                                  currentProfile: widget.profile,
+                                  storageService: widget.storageService,
+                                  nextcloudService: widget.nextcloudService,
+                                );
+                              } else if (val == 'delete') {
                                 _deleteSetlist(setlist);
                               }
                             },
                             itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'share',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.share_rounded, color: AppTheme.amber, size: 18),
+                                    SizedBox(width: 8),
+                                    Text('Als PDF teilen / Aushilfe'),
+                                  ],
+                                ),
+                              ),
                               const PopupMenuItem(
                                 value: 'delete',
                                 child: Row(

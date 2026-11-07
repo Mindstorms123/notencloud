@@ -90,6 +90,9 @@ class VoiceMatcher {
     'direktion': ['direktion', 'direktion in c', 'direktion in b', 'conductor', 'lead sheet'],
   };
 
+  /// Sub-instruments available for Percussion
+  static const List<String> percussionSubInstruments = ['Alle', 'Schlagzeug', 'Pauken', 'Mallets'];
+
   /// Aliases for specific percussion sub-instruments (Schlagzeug, Pauken, Mallets).
   /// Note: Percussion, Perkussion, Drums etc. all map to Schlagzeug!
   static const Map<String, List<String>> percussionSubAliases = {
