@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/musician_profile.dart';
 import '../../models/song.dart';
@@ -435,15 +435,25 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
 
       if (bestMatch != null) {
         try {
-          final localPath = await widget.storageService.getLocalPdfPath(
+          final isDownloaded = await widget.storageService.isPartDownloaded(
             song.id,
             bestMatch.fileName,
             part: bestMatch,
           );
-          if (await File(localPath).exists()) {
+          if (isDownloaded) {
             alreadyDownloaded++;
           } else {
-            await widget.nextcloudService!.downloadPart(bestMatch, localPath);
+            if (kIsWeb) {
+              final bytes = await widget.nextcloudService!.downloadPartBytes(bestMatch);
+              widget.storageService.cachePartBytes(song.id, bestMatch.fileName, bytes);
+            } else {
+              final localPath = await widget.storageService.getLocalPdfPath(
+                song.id,
+                bestMatch.fileName,
+                part: bestMatch,
+              );
+              await widget.nextcloudService!.downloadPart(bestMatch, localPath);
+            }
             newlyDownloaded++;
           }
         } catch (_) {}

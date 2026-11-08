@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -63,6 +64,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   bool _isLoadingPdf = true;
   bool _isViewerReady = false;
   String? _localPdfPath;
+  Uint8List? _pdfBytes;
   String? _errorMessage;
   bool _isFullscreen = false;
   double? _baseFitZoom;
@@ -360,6 +362,44 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     });
 
     try {
+      if (kIsWeb) {
+        // Web PWA: Check in-memory/session score cache first
+        final cached = widget.storageService.getCachedPartBytes(
+          _currentSong.id,
+          _currentPart.fileName,
+        );
+        if (cached != null) {
+          if (mounted) {
+            setState(() {
+              _pdfBytes = cached;
+              _isLoadingPdf = false;
+            });
+            _loadPageAnnotations(1);
+          }
+          return;
+        }
+
+        if (widget.nextcloudService != null) {
+          final bytes = await widget.nextcloudService!.downloadPartBytes(_currentPart);
+          widget.storageService.cachePartBytes(_currentSong.id, _currentPart.fileName, bytes);
+          if (mounted) {
+            setState(() {
+              _pdfBytes = bytes;
+              _isLoadingPdf = false;
+            });
+            _loadPageAnnotations(1);
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Notendatei nicht im Web-Cache und keine Cloud-Verbindung aktiv.';
+              _isLoadingPdf = false;
+            });
+          }
+        }
+        return;
+      }
+
       final localPath = await widget.storageService.getLocalPdfPath(
         _currentSong.id,
         _currentPart.fileName,
@@ -581,6 +621,91 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
     return false;
   }
 
+  PdfViewerParams _buildViewerParams(PageAnnotations currentAnn) {
+    return PdfViewerParams(
+      backgroundColor: Colors.black,
+      loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => Container(color: Colors.black),
+      errorBannerBuilder: (context, error, stackTrace, documentRef) {
+        return Container(
+          color: Colors.black,
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline_rounded, color: AppTheme.rose, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  'Fehler beim Öffnen der Noten-PDF: $error',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.darkTextSecondary),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      onGeneralTap: (context, controller, details) {
+        if (_isDrawingActive) return false;
+        if (details.type == PdfViewerGeneralTapType.doubleTap) {
+          setState(() {
+            _isFullscreen = !_isFullscreen;
+          });
+          return true;
+        }
+        return false;
+      },
+      onViewerReady: (document, controller) {
+        if (mounted) {
+          setState(() {
+            _isViewerReady = true;
+            try {
+              _baseFitZoom = controller.currentZoom;
+            } catch (_) {}
+            _pageCount = document.pages.length;
+          });
+        }
+      },
+      onPageChanged: (page) {
+        if (page != null) {
+          setState(() {
+            _currentPage = page;
+          });
+          _loadPageAnnotations(page);
+        }
+      },
+      onDocumentChanged: (document) {
+        if (document != null && mounted) {
+          setState(() {
+            _pageCount = document.pages.length;
+          });
+        }
+      },
+      pageOverlaysBuilder: (context, pageRect, page) {
+        if (!_isViewerReady || page.pageNumber != _currentPage || pageRect.width <= 0 || pageRect.height <= 0) {
+          return [];
+        }
+        return [
+          Positioned(
+            left: 0,
+            top: 0,
+            width: pageRect.width,
+            height: pageRect.height,
+            child: AnnotationCanvas(
+              annotations: currentAnn,
+              isDrawingActive: _isDrawingActive,
+              activeTool: _activeTool,
+              activeColor: _activeColor,
+              activeStrokeWidth: _activeStrokeWidth,
+              pageSize: Size(pageRect.width, pageRect.height),
+              onAnnotationsChanged: _onAnnotationsChanged,
+            ),
+          ),
+        ];
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentAnn = _pageAnnotations[_currentPage] ?? PageAnnotations(pageIndex: _currentPage);
@@ -756,92 +881,18 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                 ),
               ),
             )
+          else if (kIsWeb && _pdfBytes != null)
+            PdfViewer.data(
+              _pdfBytes!,
+              sourceName: '${_currentSong.id}_${_currentPart.fileName}',
+              controller: _pdfController,
+              params: _buildViewerParams(currentAnn),
+            )
           else if (_localPdfPath != null)
             PdfViewer.file(
               _localPdfPath!,
               controller: _pdfController,
-              params: PdfViewerParams(
-                backgroundColor: Colors.black,
-                loadingBannerBuilder: (context, bytesDownloaded, totalBytes) => Container(color: Colors.black),
-                errorBannerBuilder: (context, error, stackTrace, documentRef) {
-                  return Container(
-                    color: Colors.black,
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline_rounded, color: AppTheme.rose, size: 48),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Fehler beim Öffnen der Noten-PDF: $error',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppTheme.darkTextSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-                onGeneralTap: (context, controller, details) {
-                  if (_isDrawingActive) return false;
-                  if (details.type == PdfViewerGeneralTapType.doubleTap) {
-                    setState(() {
-                      _isFullscreen = !_isFullscreen;
-                    });
-                    return true;
-                  }
-                  return false;
-                },
-                onViewerReady: (document, controller) {
-                  if (mounted) {
-                    setState(() {
-                      _isViewerReady = true;
-                      try {
-                        _baseFitZoom = controller.currentZoom;
-                      } catch (_) {}
-                      _pageCount = document.pages.length;
-                    });
-                  }
-                },
-                onPageChanged: (page) {
-                  if (page != null) {
-                    setState(() {
-                      _currentPage = page;
-                    });
-                    _loadPageAnnotations(page);
-                  }
-                },
-                onDocumentChanged: (document) {
-                  if (document != null && mounted) {
-                    setState(() {
-                      _pageCount = document.pages.length;
-                    });
-                  }
-                },
-                pageOverlaysBuilder: (context, pageRect, page) {
-                  if (!_isViewerReady || page.pageNumber != _currentPage || pageRect.width <= 0 || pageRect.height <= 0) {
-                    return [];
-                  }
-                  return [
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      width: pageRect.width,
-                      height: pageRect.height,
-                      child: AnnotationCanvas(
-                        annotations: currentAnn,
-                        isDrawingActive: _isDrawingActive,
-                        activeTool: _activeTool,
-                        activeColor: _activeColor,
-                        activeStrokeWidth: _activeStrokeWidth,
-                        pageSize: Size(pageRect.width, pageRect.height),
-                        onAnnotationsChanged: _onAnnotationsChanged,
-                      ),
-                    ),
-                  ];
-                },
-              ),
+              params: _buildViewerParams(currentAnn),
             ),
 
           // Dark Loading Overlay: smooth transition while fetching or layouting PDF

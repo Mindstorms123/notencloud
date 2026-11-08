@@ -7,8 +7,10 @@ import 'storage_service.dart';
 
 class AnnotationService {
   final StorageService storageService;
+  final bool isWeb;
 
-  AnnotationService(this.storageService);
+  AnnotationService(this.storageService, {bool? isWeb})
+      : isWeb = isWeb ?? kIsWeb;
 
   Future<String> _getAnnotationFilePath(String songId, String partId, int pageIndex) async {
     final docs = await storageService.getAppDocsDir();
@@ -30,7 +32,15 @@ class AnnotationService {
     NextcloudService? nextcloudService,
   }) async {
     PageAnnotations? local;
-    if (!kIsWeb) {
+    if (isWeb) {
+      try {
+        final jsonStr = storageService.getWebAnnotation(songId, partId, pageIndex);
+        if (jsonStr != null) {
+          final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+          local = PageAnnotations.fromJson(map);
+        }
+      } catch (_) {}
+    } else {
       try {
         final path = await _getAnnotationFilePath(songId, partId, pageIndex);
         final file = File(path);
@@ -68,12 +78,15 @@ class AnnotationService {
     PageAnnotations annotations, {
     NextcloudService? nextcloudService,
   }) async {
-    if (kIsWeb) return false;
     try {
-      final path = await _getAnnotationFilePath(songId, partId, annotations.pageIndex);
-      final file = File(path);
       final jsonStr = jsonEncode(annotations.toJson());
-      await file.writeAsString(jsonStr);
+      if (isWeb) {
+        await storageService.saveWebAnnotation(songId, partId, annotations.pageIndex, jsonStr);
+      } else {
+        final path = await _getAnnotationFilePath(songId, partId, annotations.pageIndex);
+        final file = File(path);
+        await file.writeAsString(jsonStr);
+      }
 
       if (nextcloudService != null && nextcloudService.account.isConfigured) {
         return await nextcloudService.uploadPageAnnotations(songId, partId, annotations);
@@ -91,12 +104,15 @@ class AnnotationService {
     int pageIndex, {
     NextcloudService? nextcloudService,
   }) async {
-    if (kIsWeb) return;
     try {
-      final path = await _getAnnotationFilePath(songId, partId, pageIndex);
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
+      if (isWeb) {
+        await storageService.deleteWebAnnotation(songId, partId, pageIndex);
+      } else {
+        final path = await _getAnnotationFilePath(songId, partId, pageIndex);
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+        }
       }
       if (nextcloudService != null && nextcloudService.account.isConfigured) {
         await nextcloudService.deletePageAnnotations(songId, partId, pageIndex);

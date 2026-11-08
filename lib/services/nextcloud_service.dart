@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart' as xml;
 import '../models/nextcloud_account.dart';
@@ -449,8 +450,9 @@ class NextcloudService {
     return parts;
   }
 
-  /// Download a PDF part file to the local device
-  Future<File> downloadPart(PartFile part, String localDestinationPath,
+  /// Download a PDF part file as raw bytes (Uint8List).
+  /// Works across all platforms including Web (WASM/CanvasKit) without dart:io File dependency.
+  Future<Uint8List> downloadPartBytes(PartFile part,
       {Function(double progress)? onProgress}) async {
     final url = Uri.parse('${account.cleanServerUrl}${part.remotePath}');
     final request = http.Request('GET', url)..headers.addAll(_headers);
@@ -462,21 +464,32 @@ class NextcloudService {
 
     final totalBytes = streamedResponse.contentLength ?? 0;
     int receivedBytes = 0;
-
-    final file = File(localDestinationPath);
-    await file.parent.create(recursive: true);
-    final sink = file.openWrite();
+    final chunks = <List<int>>[];
 
     await for (final chunk in streamedResponse.stream) {
-      sink.add(chunk);
+      chunks.add(chunk);
       receivedBytes += chunk.length;
       if (totalBytes > 0 && onProgress != null) {
         onProgress(receivedBytes / totalBytes);
       }
     }
 
-    await sink.flush();
-    await sink.close();
+    final bytes = Uint8List(receivedBytes);
+    int offset = 0;
+    for (final chunk in chunks) {
+      bytes.setRange(offset, offset + chunk.length, chunk);
+      offset += chunk.length;
+    }
+    return bytes;
+  }
+
+  /// Download a PDF part file to the local device
+  Future<File> downloadPart(PartFile part, String localDestinationPath,
+      {Function(double progress)? onProgress}) async {
+    final bytes = await downloadPartBytes(part, onProgress: onProgress);
+    final file = File(localDestinationPath);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: true);
     return file;
   }
 

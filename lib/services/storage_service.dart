@@ -122,6 +122,33 @@ class StorageService {
     await _prefs.setString(_prefAccountKey, jsonEncode(account.toJson()));
   }
 
+  // --- Web-safe in-memory score cache ---
+  final Map<String, Uint8List> _webScoreCache = {};
+
+  void cachePartBytes(String songId, String fileName, Uint8List bytes) {
+    _webScoreCache['${songId}_$fileName'] = bytes;
+  }
+
+  Uint8List? getCachedPartBytes(String songId, String fileName) {
+    return _webScoreCache['${songId}_$fileName'];
+  }
+
+  bool hasCachedPartBytes(String songId, String fileName) {
+    return _webScoreCache.containsKey('${songId}_$fileName');
+  }
+
+  String? getWebAnnotation(String songId, String partId, int pageIndex) {
+    return _prefs.getString('web_ann_${songId}_${partId}_$pageIndex');
+  }
+
+  Future<void> saveWebAnnotation(String songId, String partId, int pageIndex, String jsonStr) async {
+    await _prefs.setString('web_ann_${songId}_${partId}_$pageIndex', jsonStr);
+  }
+
+  Future<void> deleteWebAnnotation(String songId, String partId, int pageIndex) async {
+    await _prefs.remove('web_ann_${songId}_${partId}_$pageIndex');
+  }
+
   // --- Offline Directory paths ---
 
   Future<Directory> getAppDocsDir() async {
@@ -132,6 +159,9 @@ class StorageService {
   }
 
   Future<String> getLocalPdfPath(String songId, String fileName, {PartFile? part}) async {
+    if (kIsWeb) {
+      return 'web://$songId/$fileName';
+    }
     final docs = await getAppDocsDir();
     final safeSongId = songId.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final safeFileName = fileName.replaceAll(RegExp(r'[^\w\s-\.]'), '_');
@@ -182,6 +212,9 @@ class StorageService {
 
   /// Checks if a part is already downloaded locally, resolving legacy filenames if needed.
   Future<bool> isPartDownloaded(String songId, String fileName, {PartFile? part}) async {
+    if (kIsWeb) {
+      return hasCachedPartBytes(songId, fileName);
+    }
     try {
       final path = await getLocalPdfPath(songId, fileName, part: part);
       return await File(path).exists();
@@ -192,6 +225,7 @@ class StorageService {
 
   /// Scans offline score directories to rename legacy files and delete redundant duplicates.
   Future<int> migrateAndDeduplicateScores(List<Song> songs) async {
+    if (kIsWeb) return 0;
     int count = 0;
     try {
       final docs = await getAppDocsDir();

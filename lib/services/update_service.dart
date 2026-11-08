@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -59,6 +60,16 @@ class UpdateService {
 
   /// Checks GitHub Releases for a newer version
   Future<AppUpdateInfo> checkForUpdate() async {
+    if (kIsWeb) {
+      return const AppUpdateInfo(
+        hasUpdate: false,
+        currentVersion: 'Web PWA',
+        latestVersion: 'Web PWA',
+        releaseName: '',
+        releaseNotes: '',
+        apkDownloadUrl: '',
+      );
+    }
     String currentVersion = '1.0.0';
     try {
       final pkgInfo = await PackageInfo.fromPlatform();
