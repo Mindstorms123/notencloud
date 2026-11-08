@@ -64,6 +64,10 @@ cd "$ROOT_DIR/build/web"
 zip -r -q "$ROOT_DIR/build/notencloud-web.zip" .
 cd "$ROOT_DIR"
 
+# Auch direkt ins Hauptverzeichnis kopieren für schnellen Zugriff
+cp "$ROOT_DIR/build/notencloud-web.zip" "$ROOT_DIR/notencloud-web.zip"
+cp "$ROOT_DIR/build/unzip.php" "$ROOT_DIR/unzip.php"
+
 SIZE=$(du -h "$ROOT_DIR/build/notencloud-web.zip" | cut -f1)
 
 echo ""

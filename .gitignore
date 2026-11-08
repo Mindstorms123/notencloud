@@ -31,6 +31,8 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+*.zip
+/unzip.php
 /coverage/
 
 # Symbolication related
