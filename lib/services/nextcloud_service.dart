@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart' as xml;
 import '../models/nextcloud_account.dart';
@@ -26,10 +26,23 @@ class NextcloudService {
     };
   }
 
+  static bool forceProxyForTesting = false;
+
+  /// Resolves the URL for WebDAV requests.
+  /// When running in browser (Web PWA), routes requests through local proxy.php
+  /// to bypass Hetzner Storage Share CORS restrictions.
+  static Uri resolveUrl(Uri uri) {
+    if (kIsWeb || forceProxyForTesting) {
+      final target = uri.toString();
+      return Uri.parse('proxy.php?url=${Uri.encodeComponent(target)}');
+    }
+    return uri;
+  }
+
   /// Test connection to Nextcloud server and verify credentials
   Future<bool> testConnection() async {
     try {
-      final statusUrl = Uri.parse('${account.cleanServerUrl}/status.php');
+      final statusUrl = resolveUrl(Uri.parse('${account.cleanServerUrl}/status.php'));
       final statusRes = await _client.get(statusUrl).timeout(const Duration(seconds: 10));
 
       if (statusRes.statusCode != 200) {
@@ -37,7 +50,7 @@ class NextcloudService {
       }
 
       // Check WebDAV credentials
-      final davUrl = Uri.parse(account.webDavBaseUrl);
+      final davUrl = resolveUrl(Uri.parse(account.webDavBaseUrl));
       final davRes = await _client.send(
         http.Request('PROPFIND', davUrl)
           ..headers.addAll(_headers)
@@ -60,10 +73,10 @@ class NextcloudService {
       }
       cleanServer = cleanServer.replaceAll(RegExp(r'/+$'), '');
 
-      final url = Uri.parse('$cleanServer/index.php/login/v2');
+      final url = resolveUrl(Uri.parse('$cleanServer/index.php/login/v2'));
       final response = await http.post(
         url,
-        headers: {'User-Agent': 'Notencloud/1.0 (Android)'},
+        headers: {'User-Agent': 'Notencloud/1.0'},
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -92,12 +105,12 @@ class NextcloudService {
     String pollToken,
   ) async {
     try {
-      final url = Uri.parse(pollEndpoint);
+      final url = resolveUrl(Uri.parse(pollEndpoint));
       final response = await http.post(
         url,
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Notencloud/1.0 (Android)',
+          'User-Agent': 'Notencloud/1.0',
         },
         body: {'token': pollToken},
       ).timeout(const Duration(seconds: 5));
@@ -126,7 +139,7 @@ class NextcloudService {
       final clean = folderPath.startsWith('/') ? folderPath : '/$folderPath';
       fullUrl = '${account.webDavBaseUrl}$clean';
     }
-    final url = Uri.parse(fullUrl);
+    final url = resolveUrl(Uri.parse(fullUrl));
 
     final request = http.Request('PROPFIND', url)
       ..headers.addAll(_headers)
@@ -382,7 +395,7 @@ class NextcloudService {
 
   /// Scans all parts in a song folder using Depth: infinity for maximum speed
   Future<List<PartFile>> _scanSongFolder(String songFolderHref, String songId) async {
-    final url = Uri.parse('${account.cleanServerUrl}$songFolderHref');
+    final url = resolveUrl(Uri.parse('${account.cleanServerUrl}$songFolderHref'));
     final request = http.Request('PROPFIND', url)
       ..headers.addAll(_headers)
       ..headers['Depth'] = 'infinity';
@@ -454,7 +467,7 @@ class NextcloudService {
   /// Works across all platforms including Web (WASM/CanvasKit) without dart:io File dependency.
   Future<Uint8List> downloadPartBytes(PartFile part,
       {Function(double progress)? onProgress}) async {
-    final url = Uri.parse('${account.cleanServerUrl}${part.remotePath}');
+    final url = resolveUrl(Uri.parse('${account.cleanServerUrl}${part.remotePath}'));
     final request = http.Request('GET', url)..headers.addAll(_headers);
 
     final streamedResponse = await _client.send(request);
@@ -523,7 +536,7 @@ class NextcloudService {
     final Map<String, Setlist> setlistsById = {};
 
     for (final path in _candidateSetlistPaths) {
-      final url = Uri.parse('${account.webDavBaseUrl}$path');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$path'));
       try {
         final request = http.Request('PROPFIND', url)
           ..headers.addAll(_headers)
@@ -550,7 +563,7 @@ class NextcloudService {
 
           // Download and parse setlist JSON
           try {
-            final getUrl = Uri.parse('${account.cleanServerUrl}$href');
+            final getUrl = resolveUrl(Uri.parse('${account.cleanServerUrl}$href'));
             final getRes = await _client.get(getUrl, headers: _headers);
             if (getRes.statusCode == 200) {
               final jsonMap = jsonDecode(utf8.decode(getRes.bodyBytes)) as Map<String, dynamic>;
@@ -580,7 +593,7 @@ class NextcloudService {
       if (!ok) continue;
 
       final setlistFilePath = '$path/${setlist.id}.json';
-      final url = Uri.parse('${account.webDavBaseUrl}$setlistFilePath');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$setlistFilePath'));
 
       try {
         final res = await _client.put(
@@ -605,7 +618,7 @@ class NextcloudService {
     bool anyDeleted = false;
     for (final path in _candidateSetlistPaths) {
       final setlistFilePath = '$path/$setlistId.json';
-      final url = Uri.parse('${account.webDavBaseUrl}$setlistFilePath');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$setlistFilePath'));
 
       try {
         final res = await _client.delete(url, headers: _headers);
@@ -621,7 +634,7 @@ class NextcloudService {
   Future<Map<String, String>> fetchKonzertmeisterAssignments() async {
     for (final path in _candidateSetlistPaths) {
       final filePath = '$path/konzertmeister_assignments.json';
-      final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$filePath'));
       try {
         final res = await _client.get(url, headers: _headers);
         if (res.statusCode == 200) {
@@ -653,7 +666,7 @@ class NextcloudService {
       if (!ok) continue;
 
       final filePath = '$path/konzertmeister_assignments.json';
-      final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$filePath'));
 
       try {
         final res = await _client.put(
@@ -677,7 +690,7 @@ class NextcloudService {
     for (final path in _candidateSetlistPaths) {
       for (final fileName in ['club_config.json', 'konzertmeister_config.json']) {
         final filePath = '$path/$fileName';
-        final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+        final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$filePath'));
         try {
           final res = await _client.get(url, headers: _headers);
           if (res.statusCode == 200) {
@@ -706,7 +719,7 @@ class NextcloudService {
       if (!ok) continue;
 
       final filePath = '$path/club_config.json';
-      final url = Uri.parse('${account.webDavBaseUrl}$filePath');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$filePath'));
 
       try {
         final res = await _client.put(
@@ -734,7 +747,7 @@ class NextcloudService {
     for (final seg in segments) {
       if (seg.isEmpty) continue;
       currentPath += '/$seg';
-      final url = Uri.parse('${account.webDavBaseUrl}$currentPath');
+      final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$currentPath'));
 
       try {
         final req = http.Request('PROPFIND', url)
@@ -770,7 +783,7 @@ class NextcloudService {
     if (!ok) return false;
 
     final remoteFilePath = '$userDir/${safePartId}_p${annotations.pageIndex}.json';
-    final url = Uri.parse('${account.webDavBaseUrl}$remoteFilePath');
+    final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
     final content = jsonEncode(annotations.toJson());
 
     try {
@@ -793,7 +806,7 @@ class NextcloudService {
     final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final userDir = _getUserAnnotationsDir(songId);
     final remoteFilePath = '$userDir/${safePartId}_p$pageIndex.json';
-    final url = Uri.parse('${account.webDavBaseUrl}$remoteFilePath');
+    final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
 
     try {
       final res = await _client.get(url, headers: _headers);
@@ -812,7 +825,7 @@ class NextcloudService {
     final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final userDir = _getUserAnnotationsDir(songId);
     final remoteFilePath = '$userDir/${safePartId}_p$pageIndex.json';
-    final url = Uri.parse('${account.webDavBaseUrl}$remoteFilePath');
+    final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
 
     try {
       final res = await _client.delete(url, headers: _headers);

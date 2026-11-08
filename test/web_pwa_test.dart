@@ -128,5 +128,18 @@ void main() {
       expect(utf8.decode(bytes), equals('%PDF-1.4 dummy score content'));
       expect(lastProgress, equals(1.0));
     });
+
+    test('resolveUrl routes requests through proxy.php when proxy mode is active', () {
+      final directUri = Uri.parse('https://nx12345.your-storageshare.de/remote.php/dav/files/user/');
+      
+      NextcloudService.forceProxyForTesting = false;
+      expect(NextcloudService.resolveUrl(directUri), equals(directUri));
+
+      NextcloudService.forceProxyForTesting = true;
+      final proxied = NextcloudService.resolveUrl(directUri);
+      expect(proxied.path, equals('proxy.php'));
+      expect(proxied.queryParameters['url'], equals(directUri.toString()));
+      NextcloudService.forceProxyForTesting = false;
+    });
   });
 }

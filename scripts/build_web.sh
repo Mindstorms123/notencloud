@@ -2,7 +2,7 @@
 set -e
 
 # Notencloud Web PWA Build & Packaging Script
-# Erstellt ein fertiges Web-Release für die Bereitstellung auf dem Vereins-Server.
+# Optimiert für Standard-Shared-Webhosting (FTP/WebFTP) mit Hetzner Storage Share
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -50,6 +50,12 @@ echo ""
 echo "🚀 [3/4] Flutter Web Release kompilieren..."
 flutter build web --release
 
+# Webhosting-Dateien (.htaccess, CORS-Proxy, Unzip-Helfer) sicherstellen
+cp "$ROOT_DIR/web/.htaccess" "$ROOT_DIR/build/web/.htaccess" 2>/dev/null || true
+cp "$ROOT_DIR/web/proxy.php" "$ROOT_DIR/build/web/proxy.php" 2>/dev/null || true
+cp "$ROOT_DIR/web/unzip.php" "$ROOT_DIR/build/web/unzip.php" 2>/dev/null || true
+cp "$ROOT_DIR/web/unzip.php" "$ROOT_DIR/build/unzip.php" 2>/dev/null || true
+
 # 4. ZIP-Paket für einfachen Upload schnüren
 echo ""
 echo "📦 [4/4] Web-Paket schnüren (build/notencloud-web.zip)..."
@@ -64,10 +70,16 @@ echo ""
 echo "=========================================="
 echo "✅ Notencloud Web PWA erfolgreich erstellt!"
 echo "Archiv: $ROOT_DIR/build/notencloud-web.zip ($SIZE)"
+echo "WebFTP-Helfer: $ROOT_DIR/build/unzip.php"
 echo ""
-echo "Anleitung zum Hochladen auf den Vereins-Server:"
-echo "1. Lade 'build/notencloud-web.zip' per FTP/SFTP auf deinen Server hoch."
-echo "2. Entpacke das Archiv in das gewünschte Verzeichnis (z. B. '/noten' oder '/notencloud')."
-echo "3. Musiker können Notencloud nun unter https://deine-domain.de/noten/ öffnen"
-echo "   und auf Apple-Geräten direkt 'Zum Home-Bildschirm hinzufügen' wählen!"
+echo "Bereitstellung per WebFTP auf einfachem Shared-Hosting:"
+echo "--------------------------------------------------------"
+echo "Option A (WebFTP mit ZIP-Entpackfunktion):"
+echo "  1. Lade 'build/notencloud-web.zip' in den Zielordner (z.B. /var/www/noten/)."
+echo "  2. Klicke im WebFTP auf 'Entpacken'."
+echo ""
+echo "Option B (WebFTP OHNE Entpackfunktion):"
+echo "  1. Lade 'build/notencloud-web.zip' UND 'build/unzip.php' in den Zielordner hoch."
+echo "  2. Rufe im Browser einmal 'https://eure-domain.de/noten/unzip.php' auf."
+echo "     -> Entpackt alles automatisch in 1 Sekunde und bereinigt sich selbst!"
 echo "=========================================="
