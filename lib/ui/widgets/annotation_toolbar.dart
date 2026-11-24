@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/annotation.dart';
 import '../theme/app_theme.dart';
@@ -46,8 +47,25 @@ class AnnotationToolbar extends StatelessWidget {
     Color(0xFF38BDF8), // Neon Cyan
   ];
 
+  String get _activeToolName => switch (activeTool) {
+        StrokeType.pen => 'Bleistift',
+        StrokeType.highlighter => 'Textmarker',
+        StrokeType.text => 'Text',
+        StrokeType.eraser => 'Radierer',
+      };
+
   @override
   Widget build(BuildContext context) {
+    // In der Web-App keine Schwebe-Hinweise an den Werkzeugen: Auf dem Tablet
+    // erschienen sie beim Antippen am falschen Knopf (z. B. „Text tippen“ über
+    // dem Radierer). Stattdessen steht der Name des aktiven Werkzeugs fest in der Leiste.
+    return TooltipVisibility(
+      visible: !kIsWeb,
+      child: _buildBar(context),
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxWidth: 420),
       margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -134,6 +152,19 @@ class AnnotationToolbar extends StatelessWidget {
                       activeColor: AppTheme.rose,
                       tooltip: 'Radierer',
                       onTap: () => onSelectTool(StrokeType.eraser),
+                    ),
+
+                    // Name des aktiven Werkzeugs, immer passend zur Auswahl
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6, right: 2),
+                      child: Text(
+                        _activeToolName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white70,
+                        ),
+                      ),
                     ),
 
                     Container(
