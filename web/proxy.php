@@ -6,11 +6,46 @@
  * ohne Cross-Origin-Blockaden (CORS) im Browser.
  */
 
+// 0. Optionale Einschränkung über proxy.config.php (liegt neben dieser Datei):
+//    <?php return [
+//        'hosts'   => ['nx12345.your-storageshare.de'],   // erlaubte Nextcloud-Server
+//        'origins' => ['https://beispiel.github.io'],      // Seiten, die den Proxy nutzen dürfen
+//    ];
+//    Ohne diese Datei leitet der Proxy an jeden Server weiter. Sobald der Proxy
+//    öffentlich erreichbar ist, sollte sie angelegt werden.
+$config = [];
+$configFile = __DIR__ . '/proxy.config.php';
+if (is_file($configFile)) {
+    $loaded = include $configFile;
+    if (is_array($loaded)) {
+        $config = $loaded;
+    }
+}
+$allowedHosts = array_map('strtolower', $config['hosts'] ?? []);
+$allowedOrigins = array_map(function ($o) {
+    return rtrim(strtolower($o), '/');
+}, $config['origins'] ?? []);
+
 // 1. CORS Headers setzen
-header("Access-Control-Allow-Origin: *");
+$origin = isset($_SERVER['HTTP_ORIGIN']) ? rtrim(strtolower($_SERVER['HTTP_ORIGIN']), '/') : '';
+if (empty($allowedOrigins)) {
+    header("Access-Control-Allow-Origin: *");
+} else {
+    header("Vary: Origin");
+    if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
+        header("Access-Control-Allow-Origin: " . $_SERVER['HTTP_ORIGIN']);
+    } elseif ($origin !== '') {
+        // Fremde Seite: nicht bedienen
+        http_response_code(403);
+        header("Content-Type: text/plain; charset=utf-8");
+        echo "Fehler: Diese Seite darf den Proxy nicht nutzen.";
+        exit;
+    }
+}
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PROPFIND, MKCOL, MOVE, COPY");
-header("Access-Control-Allow-Headers: Authorization, Content-Type, Depth, OCS-APIREQUEST, User-Agent, X-Requested-With");
+header("Access-Control-Allow-Headers: Authorization, Content-Type, Depth, Destination, Overwrite, OCS-APIREQUEST, User-Agent, X-Requested-With");
 header("Access-Control-Expose-Headers: ETag, Content-Length, Content-Type, DAV");
+header("Access-Control-Max-Age: 86400");
 
 // Preflight OPTIONS Anfragen sofort mit 200 OK beantworten
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -35,6 +70,17 @@ if (!preg_match('#^https?://#i', $targetUrl)) {
     exit;
 }
 
+// Nur freigegebene Nextcloud-Server ansprechen (falls eingeschränkt)
+if (!empty($allowedHosts)) {
+    $targetHost = strtolower((string) parse_url($targetUrl, PHP_URL_HOST));
+    if ($targetHost === '' || !in_array($targetHost, $allowedHosts, true)) {
+        http_response_code(403);
+        header("Content-Type: text/plain; charset=utf-8");
+        echo "Fehler: Dieser Server ist für den Proxy nicht freigegeben.";
+        exit;
+    }
+}
+
 // 3. Request mit cURL an Hetzner Storage Share weiterleiten
 $ch = curl_init($targetUrl);
 
@@ -57,7 +103,7 @@ if (function_exists('getallheaders')) {
 foreach ($incomingHeaders as $name => $value) {
     $lower = strtolower($name);
     // Hop-by-hop und Host-Header nicht weiterreichen
-    if (in_array($lower, ['host', 'content-length', 'accept-encoding', 'connection'])) {
+    if (in_array($lower, ['host', 'content-length', 'accept-encoding', 'connection', 'origin', 'referer', 'cookie'])) {
         continue;
     }
     $forwardHeaders[] = "$name: $value";
