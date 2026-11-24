@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../models/musician_profile.dart';
 import '../../models/song.dart';
 import '../../services/annotation_service.dart';
@@ -373,8 +374,13 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
     int current = 0;
     int alreadyDownloaded = 0;
     int newlyDownloaded = 0;
+    int failed = 0;
+    bool cancelled = false;
     String currentTitle = 'Prüfe Noten...';
     void Function(void Function())? dialogSetState;
+    // Das Fenster über den Haupt-Navigator öffnen und später genau dort
+    // schließen – sonst träfe das Schließen eine andere, inzwischen geöffnete Seite.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
 
     showDialog(
       context: context,
@@ -382,7 +388,11 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           dialogSetState = setDialogState;
-          return AlertDialog(
+          // Die Zurück-Taste schließt das Fenster nicht: Der Download liefe
+          // sonst unsichtbar weiter. Abbrechen geht über den Knopf.
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
             backgroundColor: AppTheme.darkCard,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: const Row(
@@ -422,61 +432,120 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppTheme.primaryLight, fontSize: 12),
                 ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Der Bildschirm bleibt währenddessen an. Bitte die App geöffnet lassen.',
+                  style: TextStyle(color: AppTheme.darkTextMuted, fontSize: 12),
+                ),
               ],
             ),
+            actions: [
+              TextButton(
+                onPressed: cancelled
+                    ? null
+                    : () {
+                        cancelled = true;
+                        setDialogState(() {});
+                      },
+                child: Text(cancelled ? 'Wird abgebrochen...' : 'Abbrechen'),
+              ),
+            ],
+          ),
           );
         },
       ),
     );
 
+    bool inForeground() {
+      final state = WidgetsBinding.instance.lifecycleState;
+      return state == null || state == AppLifecycleState.resumed;
+    }
+
+    // Ist die App im Hintergrund (Bildschirm aus, andere App), bricht Android
+    // laufende Übertragungen ab. Dann warten, bis sie wieder vorne ist.
+    Future<void> waitForForeground() async {
+      while (!inForeground() && !cancelled) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    // Bildschirm anlassen, damit das Handy mitten im Download nicht ausgeht.
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {}
+
     for (final song in relevantSongs) {
+      if (cancelled) break;
       final bestMatch = VoiceMatcher.findBestMatchForSong(song, _activeProfile);
       current++;
       currentTitle = song.title;
       dialogSetState?.call(() {});
 
       if (bestMatch != null) {
-        try {
-          final isDownloaded = await widget.storageService.isPartDownloaded(
-            song.id,
-            bestMatch.fileName,
-            part: bestMatch,
-          );
-          if (isDownloaded) {
-            alreadyDownloaded++;
-          } else {
-            if (kIsWeb) {
-              final bytes = await widget.nextcloudService!.downloadPartBytes(bestMatch);
-              widget.storageService.cachePartBytes(song.id, bestMatch.fileName, bytes);
+        var done = false;
+        var attempts = 0;
+        while (!done && !cancelled && attempts < 3) {
+          await waitForForeground();
+          if (cancelled) break;
+          try {
+            final isDownloaded = await widget.storageService.isPartDownloaded(
+              song.id,
+              bestMatch.fileName,
+              part: bestMatch,
+            );
+            if (isDownloaded) {
+              alreadyDownloaded++;
             } else {
-              final localPath = await widget.storageService.getLocalPdfPath(
-                song.id,
-                bestMatch.fileName,
-                part: bestMatch,
-              );
-              await widget.nextcloudService!.downloadPart(bestMatch, localPath);
+              if (kIsWeb) {
+                final bytes = await widget.nextcloudService!.downloadPartBytes(bestMatch);
+                widget.storageService.cachePartBytes(song.id, bestMatch.fileName, bytes);
+              } else {
+                final localPath = await widget.storageService.getLocalPdfPath(
+                  song.id,
+                  bestMatch.fileName,
+                  part: bestMatch,
+                );
+                await widget.nextcloudService!.downloadPart(bestMatch, localPath);
+              }
+              newlyDownloaded++;
             }
-            newlyDownloaded++;
+            done = true;
+          } catch (_) {
+            // Abbruch, weil die App im Hintergrund war: zählt nicht als
+            // Fehlversuch, das Stück wird nach der Rückkehr neu geladen.
+            if (inForeground()) attempts++;
+            await Future<void>.delayed(const Duration(seconds: 1));
           }
-        } catch (_) {}
+        }
+        if (!done && !cancelled) failed++;
       }
       dialogSetState?.call(() {});
     }
 
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
+
+    if (rootNavigator.mounted) rootNavigator.pop(); // Fortschrittsfenster schließen
     if (mounted) {
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
-      }
       await _checkOfflineStatus();
       if (mounted) {
+        final String message;
+        if (cancelled) {
+          message = 'Download abgebrochen: $newlyDownloaded Stücke geladen, der Rest fehlt noch.';
+        } else if (failed > 0) {
+          message =
+              '$failed Stücke konnten nicht geladen werden ($newlyDownloaded neu geladen). Bitte den Download noch einmal starten.';
+        } else if (newlyDownloaded > 0) {
+          message = '$newlyDownloaded neue Stücke heruntergeladen ($alreadyDownloaded waren bereits offline).';
+        } else {
+          message = 'Alle $alreadyDownloaded Stücke sind bereits vollständig offline verfügbar!';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.emerald,
-            content: Text(
-              newlyDownloaded > 0
-                  ? '$newlyDownloaded neue Stücke heruntergeladen ($alreadyDownloaded waren bereits offline).'
-                  : 'Alle $alreadyDownloaded Stücke sind bereits vollständig offline verfügbar!',
-            ),
+            backgroundColor: (cancelled || failed > 0) ? AppTheme.amber : AppTheme.emerald,
+            duration: Duration(seconds: (cancelled || failed > 0) ? 6 : 4),
+            content: Text(message),
           ),
         );
       }

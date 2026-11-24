@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class AppUpdateInfo {
   final bool hasUpdate;
@@ -139,43 +141,121 @@ class UpdateService {
     }
   }
 
-  /// Downloads the APK from GitHub and launches the Android package installer
+  /// Fortschritt des laufenden Update-Downloads (0–1), `null` wenn keiner läuft.
+  ///
+  /// Der Download hängt bewusst nicht an der Einstellungsseite: Er läuft
+  /// weiter, wenn man in der App woandershin wechselt, und die Seite zeigt den
+  /// Stand wieder an, sobald sie zurückkommt.
+  static final ValueNotifier<double?> downloadProgress = ValueNotifier<double?>(null);
+  static Future<OpenResult>? _activeDownload;
+
+  /// Lädt die APK und startet die Installation. Ein zweiter Aufruf während
+  /// eines laufenden Downloads hängt sich an diesen an.
   Future<OpenResult> downloadAndInstallApk(
     String apkUrl, {
     Function(double progress)? onProgress,
+  }) {
+    return _activeDownload ??= () async {
+      downloadProgress.value = 0;
+      try {
+        final apkFile = await downloadApk(
+          apkUrl,
+          onProgress: (p) {
+            downloadProgress.value = p;
+            onProgress?.call(p);
+          },
+        );
+        // Trigger Android package installer
+        return await OpenFilex.open(
+          apkFile.path,
+          type: 'application/vnd.android.package-archive',
+        );
+      } finally {
+        _activeDownload = null;
+        downloadProgress.value = null;
+      }
+    }();
+  }
+
+  static bool _inForeground() {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state == null || state == AppLifecycleState.resumed;
+  }
+
+  /// Lädt die APK in den temporären Ordner.
+  ///
+  /// Geht das Handy aus oder wechselt man die App, trennt Android die
+  /// Verbindung. Der Download bricht dann nicht ab, sondern wartet, bis die
+  /// App wieder vorne ist, und setzt an der erreichten Stelle fort
+  /// (HTTP-Range). Der Bildschirm bleibt währenddessen an.
+  Future<File> downloadApk(
+    String apkUrl, {
+    Function(double progress)? onProgress,
+    int maxAttempts = 6,
+    Duration retryDelay = const Duration(seconds: 2),
   }) async {
     final tempDir = await getTemporaryDirectory();
     final apkFile = File('${tempDir.path}/notencloud_update.apk');
-
     if (await apkFile.exists()) {
       await apkFile.delete();
     }
 
-    final req = http.Request('GET', Uri.parse(apkUrl));
-    final streamedResponse = await _client.send(req);
+    var received = 0;
+    var total = 0;
+    var attempts = 0;
 
-    if (streamedResponse.statusCode != 200) {
-      throw Exception('Download fehlgeschlagen (HTTP ${streamedResponse.statusCode})');
-    }
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {}
 
-    final totalBytes = streamedResponse.contentLength ?? 0;
-    int receivedBytes = 0;
+    try {
+      while (true) {
+        while (!_inForeground()) {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+        try {
+          final req = http.Request('GET', Uri.parse(apkUrl));
+          if (received > 0) req.headers['Range'] = 'bytes=$received-';
+          final response = await _client.send(req);
 
-    final sink = apkFile.openWrite();
-    await for (final chunk in streamedResponse.stream) {
-      sink.add(chunk);
-      receivedBytes += chunk.length;
-      if (totalBytes > 0 && onProgress != null) {
-        onProgress(receivedBytes / totalBytes);
+          if (received > 0 && response.statusCode == 200) {
+            // Der Server setzt nicht fort, sondern schickt alles neu.
+            received = 0;
+            total = 0;
+          } else if (response.statusCode != 200 && response.statusCode != 206) {
+            throw Exception('Download fehlgeschlagen (HTTP ${response.statusCode})');
+          }
+          if (total == 0) total = (response.contentLength ?? 0) + received;
+
+          final sink = apkFile.openWrite(mode: received > 0 ? FileMode.append : FileMode.write);
+          try {
+            await for (final chunk in response.stream) {
+              sink.add(chunk);
+              received += chunk.length;
+              if (total > 0 && onProgress != null) {
+                onProgress((received / total).clamp(0.0, 1.0));
+              }
+            }
+          } finally {
+            await sink.flush();
+            await sink.close();
+          }
+
+          if (total > 0 && received < total) {
+            throw Exception('Verbindung vorzeitig beendet ($received von $total Bytes)');
+          }
+          return apkFile;
+        } catch (_) {
+          // Abbruch im Hintergrund zählt nicht als Fehlversuch.
+          if (_inForeground()) attempts++;
+          if (attempts >= maxAttempts) rethrow;
+          await Future<void>.delayed(retryDelay);
+        }
       }
+    } finally {
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
     }
-    await sink.flush();
-    await sink.close();
-
-    // Trigger Android package installer
-    return await OpenFilex.open(
-      apkFile.path,
-      type: 'application/vnd.android.package-archive',
-    );
   }
 }

@@ -93,6 +93,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _passwordController.text = _account.password;
     _rootFolderController.text = _account.rootFolder;
 
+    // Läuft bereits ein Update-Download (Seite war zwischendurch weg), wieder anzeigen.
+    UpdateService.downloadProgress.addListener(_onUpdateDownloadProgress);
+    _onUpdateDownloadProgress();
+
     PackageInfo.fromPlatform().then((info) {
       if (mounted) {
         setState(() {
@@ -114,6 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    UpdateService.downloadProgress.removeListener(_onUpdateDownloadProgress);
     HardwareKeyboard.instance.removeHandler(_handlePedalTesterKeyEvent);
     _pedalTesterTimer?.cancel();
     _serverUrlController.dispose();
@@ -586,6 +591,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _onUpdateDownloadProgress() {
+    final progress = UpdateService.downloadProgress.value;
+    if (!mounted) return;
+    final downloading = progress != null;
+    if (downloading == _isDownloadingUpdate && (progress ?? 0) == _downloadProgress) return;
+    // Nicht mitten im Bildaufbau: Der Listener kann aus initState heraus laufen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _isDownloadingUpdate = downloading;
+        if (progress != null) _downloadProgress = progress;
+      });
+    });
+  }
+
   Future<void> _downloadAndInstall(String apkUrl) async {
     setState(() {
       _isDownloadingUpdate = true;
@@ -593,16 +613,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      final result = await UpdateService().downloadAndInstallApk(
-        apkUrl,
-        onProgress: (p) {
-          if (mounted) {
-            setState(() {
-              _downloadProgress = p;
-            });
-          }
-        },
-      );
+      final result = await UpdateService().downloadAndInstallApk(apkUrl);
 
       if (mounted) {
         setState(() {
@@ -1513,7 +1524,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // App Updates & ADB Pixel Fast-Installer Card (nicht in der Web-App:
+          // App-Updates (nicht in der Web-App:
           // dort gibt es keine APK, die Seite aktualisiert sich selbst)
           if (!kIsWeb) Material(
             color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
@@ -1622,6 +1633,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   : 'Starte Download...',
                               style: const TextStyle(fontSize: 11, color: AppTheme.emerald),
                             ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Der Bildschirm bleibt an. Wird die App unterbrochen, geht der Download danach an derselben Stelle weiter.',
+                              style: TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
+                            ),
                           ] else ...[
                             Row(
                               children: [
@@ -1665,41 +1681,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
 
-                  const SizedBox(height: 14),
-                  const Divider(height: 1, color: Colors.white12),
-                  const SizedBox(height: 14),
-
-                  // ADB Fast Installer Tip
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.darkSurface : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.terminal_rounded, size: 20, color: AppTheme.amber),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                'Pixel Schnell-Installation (ADB)',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.amber),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                './install_pixel.sh im Terminal ausführen',
-                                style: TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppTheme.darkTextSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
