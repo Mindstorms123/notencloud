@@ -489,6 +489,20 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         _currentPart.id,
         page,
       ).then((cloudAnn) {
+        // Notiz liegt nur auf diesem Gerät (früher schlug das Hochladen
+        // stillschweigend fehl): jetzt nachreichen, damit andere Geräte sie sehen.
+        // Nur wenn sicher nichts in der Nextcloud liegt, nicht bei Abruffehlern.
+        if (cloudAnn == null &&
+            mounted &&
+            !widget.nextcloudService!.lastAnnotationDownloadFailed &&
+            (ann.strokes.isNotEmpty || ann.textNotes.isNotEmpty)) {
+          widget.annotationService
+              .saveAnnotations(_currentSong.id, _currentPart.id, ann, nextcloudService: widget.nextcloudService)
+              .then((ok) {
+            if (ok && mounted) setState(() => _isCloudSynced = true);
+          });
+          return;
+        }
         if (cloudAnn != null && mounted) {
           final localTime = ann.updatedAt;
           final cloudTime = cloudAnn.updatedAt;

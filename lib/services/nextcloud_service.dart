@@ -784,79 +784,125 @@ class NextcloudService {
   /// Warum der letzte Upload einer Notiz fehlgeschlagen ist (sonst null).
   String? lastAnnotationUploadError;
 
-  String _getUserAnnotationsDir(String songId) {
+  /// Mögliche Ablageorte der Notizen eines Stücks, in dieser Reihenfolge:
+  ///   1. im Notenordner des Vereins (`<Notenordner>/_Notizen/<user>/<stück>`)
+  ///   2. im eigenen Bereich des Benutzers (`/_Notizen/<user>/<stück>`)
+  ///
+  /// Der Notenordner ist für normale Mitglieder oft nur lesbar. Dann scheiterte
+  /// das Speichern früher ganz und Notizen blieben auf dem Gerät. Der eigene
+  /// Bereich ist immer beschreibbar – so wie bei den Setlisten.
+  List<String> _annotationDirs(String songId) {
     final safeUser = account.username.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final safeSongId = songId.replaceAll(RegExp(r'[^\w\s-]'), '_');
-    return '${account.cleanRootFolder}/_Notizen/$safeUser/$safeSongId';
+    final suffix = '/_Notizen/$safeUser/$safeSongId';
+    final root = account.cleanRootFolder == '/' ? '' : account.cleanRootFolder;
+    return {'$root$suffix', suffix}.toList();
+  }
+
+  /// Ablageort, an dem das Speichern zuletzt geklappt hat (Index in
+  /// [_annotationDirs]); erspart bei jeder Notiz den Fehlversuch im Notenordner.
+  int? _writableAnnotationDir;
+
+  /// Ob beim letzten Abruf ein Ablageort nicht erreichbar war. Dann heißt
+  /// „nichts gefunden“ nicht, dass in der Nextcloud nichts liegt.
+  bool lastAnnotationDownloadFailed = false;
+
+  static String _annotationFileName(String partId, int pageIndex) {
+    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
+    return '${safePartId}_p$pageIndex.json';
   }
 
   /// Upload a user's page annotations to Nextcloud `_Notizen/<user>/<songId>/<partId>_p<page>.json`
   Future<bool> uploadPageAnnotations(String songId, String partId, PageAnnotations annotations) async {
-    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
-    final userDir = _getUserAnnotationsDir(songId);
+    final dirs = _annotationDirs(songId);
+    final fileName = _annotationFileName(partId, annotations.pageIndex);
+    final body = utf8.encode(jsonEncode(annotations.toJson()));
     lastAnnotationUploadError = null;
-    final ok = await ensureDirectoryExists(userDir);
-    if (!ok) {
-      lastAnnotationUploadError = 'Der Ordner „$userDir“ ließ sich in der Nextcloud nicht anlegen (fehlt das Schreibrecht?).';
-      return false;
-    }
 
-    final remoteFilePath = '$userDir/${safePartId}_p${annotations.pageIndex}.json';
-    final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
-    final content = jsonEncode(annotations.toJson());
+    final order = <int>[
+      if (_writableAnnotationDir != null && _writableAnnotationDir! < dirs.length) _writableAnnotationDir!,
+      for (var i = 0; i < dirs.length; i++)
+        if (i != _writableAnnotationDir) i,
+    ];
 
-    try {
-      final res = await _client.put(
-        url,
-        headers: {
-          ..._headers,
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-        body: utf8.encode(content),
-      );
-      final saved = res.statusCode == 201 || res.statusCode == 204;
-      if (!saved) {
-        lastAnnotationUploadError = 'Die Nextcloud hat das Speichern abgelehnt (Status ${res.statusCode}).';
+    String? error;
+    for (final index in order) {
+      final dir = dirs[index];
+      if (!await ensureDirectoryExists(dir)) {
+        error = 'Der Ordner „$dir“ ließ sich in der Nextcloud nicht anlegen (fehlt das Schreibrecht?).';
+        continue;
       }
-      return saved;
-    } catch (e) {
-      lastAnnotationUploadError = 'Keine Verbindung zur Nextcloud ($e).';
-      return false;
+      try {
+        final res = await _client.put(
+          resolveUrl(Uri.parse('${account.webDavBaseUrl}$dir/$fileName')),
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          body: body,
+        );
+        if (res.statusCode == 201 || res.statusCode == 204) {
+          _writableAnnotationDir = index;
+          return true;
+        }
+        error = 'Die Nextcloud hat das Speichern in „$dir“ abgelehnt (Status ${res.statusCode}).';
+      } catch (e) {
+        error = 'Keine Verbindung zur Nextcloud ($e).';
+      }
     }
+    lastAnnotationUploadError = error;
+    return false;
   }
 
-  /// Download a user's page annotations from Nextcloud
+  /// Download a user's page annotations from Nextcloud.
+  ///
+  /// Sieht an allen Ablageorten nach und nimmt die neueste Fassung – ein
+  /// anderes Gerät kann die Notiz an einem anderen Ort abgelegt haben.
   Future<PageAnnotations?> downloadPageAnnotations(String songId, String partId, int pageIndex) async {
-    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
-    final userDir = _getUserAnnotationsDir(songId);
-    final remoteFilePath = '$userDir/${safePartId}_p$pageIndex.json';
-    final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
-
-    try {
-      final res = await _client.get(url, headers: _headers);
-      if (res.statusCode == 200) {
-        final map = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        return PageAnnotations.fromJson(map).copyWith(isSyncedWithCloud: true);
+    final fileName = _annotationFileName(partId, pageIndex);
+    PageAnnotations? newest;
+    lastAnnotationDownloadFailed = false;
+    for (final dir in _annotationDirs(songId)) {
+      try {
+        final res = await _client.get(
+          resolveUrl(Uri.parse('${account.webDavBaseUrl}$dir/$fileName')),
+          headers: _headers,
+        );
+        if (res.statusCode != 200) {
+          if (res.statusCode != 404) lastAnnotationDownloadFailed = true;
+          continue;
+        }
+        final found = PageAnnotations.fromJson(jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>)
+            .copyWith(isSyncedWithCloud: true);
+        final foundTime = found.updatedAt;
+        final newestTime = newest?.updatedAt;
+        if (newest == null || (foundTime != null && (newestTime == null || foundTime.isAfter(newestTime)))) {
+          newest = found;
+        }
+      } catch (_) {
+        lastAnnotationDownloadFailed = true;
       }
-      return null;
-    } catch (_) {
-      return null;
     }
+    return newest;
   }
 
-  /// Delete a user's page annotations from Nextcloud
+  /// Delete a user's page annotations from Nextcloud (an allen Ablageorten)
   Future<bool> deletePageAnnotations(String songId, String partId, int pageIndex) async {
-    final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
-    final userDir = _getUserAnnotationsDir(songId);
-    final remoteFilePath = '$userDir/${safePartId}_p$pageIndex.json';
-    final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
-
-    try {
-      final res = await _client.delete(url, headers: _headers);
-      return res.statusCode == 204 || res.statusCode == 200 || res.statusCode == 404;
-    } catch (_) {
-      return false;
+    final fileName = _annotationFileName(partId, pageIndex);
+    var allOk = true;
+    for (final dir in _annotationDirs(songId)) {
+      try {
+        final res = await _client.delete(
+          resolveUrl(Uri.parse('${account.webDavBaseUrl}$dir/$fileName')),
+          headers: _headers,
+        );
+        // 403: dort darf dieses Konto nicht schreiben, also liegt dort auch nichts von ihm.
+        if (![200, 204, 403, 404].contains(res.statusCode)) allOk = false;
+      } catch (_) {
+        allOk = false;
+      }
     }
+    return allOk;
   }
 }
 
