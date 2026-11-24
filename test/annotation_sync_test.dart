@@ -110,6 +110,25 @@ void main() {
     expect(loaded?.updatedAt, DateTime(2026, 11, 24, 12, 30));
   });
 
+  test('many quick changes are uploaded one after another and only the latest state is kept', () async {
+    final cloud = FakeCloud(notesReadOnly: true);
+    final service = serviceFor(cloud);
+
+    // Fünf Striche kurz hintereinander, ohne auf den vorigen Upload zu warten.
+    final results = await Future.wait([
+      for (var minute = 0; minute < 5; minute++) service.uploadPageAnnotations('Marsch', 'Marsch-Tuba', note(minute)),
+    ]);
+
+    expect(results, everyElement(isTrue));
+    expect(service.lastAnnotationUploadError, isNull);
+    expect(cloud.files[userArea], contains('T12:04'));
+    // Nicht fünf Übertragungen, sondern der erste Stand und danach der neueste.
+    expect(cloud.log.where((l) => l.startsWith('PUT') && l.contains('/_Notizen/leon/')).length, lessThanOrEqualTo(3));
+    // Jeder Ordner wird nur einmal angelegt.
+    final created = cloud.log.where((l) => l.startsWith('MKCOL') && !l.contains('/Noten/')).toList();
+    expect(created.toSet().length, created.length);
+  });
+
   test('explains the failure when nothing is writable', () async {
     final cloud = FakeCloud(notesReadOnly: true)..dirs.clear();
     final service = NextcloudService(

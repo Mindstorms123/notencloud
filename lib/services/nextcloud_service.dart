@@ -756,30 +756,43 @@ class NextcloudService {
     final segments = clean.split('/');
     var currentPath = '';
 
+    Future<int> probe(Uri url) async {
+      final req = http.Request('PROPFIND', url)
+        ..headers.addAll(_headers)
+        ..headers['Depth'] = '0';
+      return (await _client.send(req)).statusCode;
+    }
+
     for (final seg in segments) {
       if (seg.isEmpty) continue;
       currentPath += '/$seg';
+      // Schon gesehen: nicht bei jeder Notiz erneut nachfragen.
+      if (_knownDirs.contains(currentPath)) continue;
       final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$currentPath'));
 
       try {
-        final req = http.Request('PROPFIND', url)
-          ..headers.addAll(_headers)
-          ..headers['Depth'] = '0';
-        final res = await _client.send(req);
-
-        if (res.statusCode == 404) {
+        final status = await probe(url);
+        if (status == 404) {
           final mkcolReq = http.Request('MKCOL', url)..headers.addAll(_headers);
           final mkcolRes = await _client.send(mkcolReq);
           if (mkcolRes.statusCode != 201 && mkcolRes.statusCode != 405) {
-            return false;
+            // Ein paralleler Vorgang kann den Ordner gerade angelegt haben
+            // (Nextcloud antwortet dann z. B. mit „gesperrt“): noch einmal nachsehen.
+            if (await probe(url) != 207) return false;
           }
+        } else if (status != 207) {
+          return false;
         }
+        _knownDirs.add(currentPath);
       } catch (_) {
         return false;
       }
     }
     return true;
   }
+
+  /// Ordner, deren Existenz in dieser Sitzung schon bestätigt wurde.
+  final Set<String> _knownDirs = {};
 
   /// Warum der letzte Upload einer Notiz fehlgeschlagen ist (sonst null).
   String? lastAnnotationUploadError;
@@ -812,8 +825,34 @@ class NextcloudService {
     return '${safePartId}_p$pageIndex.json';
   }
 
+  Future<void> _annotationQueue = Future<void>.value();
+  final Map<String, PageAnnotations> _pendingAnnotations = {};
+
   /// Upload a user's page annotations to Nextcloud `_Notizen/<user>/<songId>/<partId>_p<page>.json`
-  Future<bool> uploadPageAnnotations(String songId, String partId, PageAnnotations annotations) async {
+  ///
+  /// Uploads laufen nacheinander, nicht gleichzeitig: Jeder Strich löst einen
+  /// aus, und parallele Uploads legten dieselben Ordner mehrfach an und kamen
+  /// sich in der Nextcloud in die Quere. Folgen mehrere Änderungen derselben
+  /// Seite schnell aufeinander, wird nur der neueste Stand übertragen.
+  Future<bool> uploadPageAnnotations(String songId, String partId, PageAnnotations annotations) {
+    final key = '$songId/${_annotationFileName(partId, annotations.pageIndex)}';
+    _pendingAnnotations[key] = annotations;
+
+    final result = _annotationQueue.then((_) async {
+      final latest = _pendingAnnotations.remove(key);
+      // Ein früherer Durchlauf hat diesen Stand bereits mitgenommen.
+      if (latest == null) return lastAnnotationUploadError == null;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        if (await _uploadPageAnnotationsOnce(songId, partId, latest)) return true;
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+      }
+      return false;
+    });
+    _annotationQueue = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<bool> _uploadPageAnnotationsOnce(String songId, String partId, PageAnnotations annotations) async {
     final dirs = _annotationDirs(songId);
     final fileName = _annotationFileName(partId, annotations.pageIndex);
     final body = utf8.encode(jsonEncode(annotations.toJson()));
