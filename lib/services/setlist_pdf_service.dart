@@ -15,6 +15,13 @@ import 'storage_service.dart';
 import 'voice_matcher.dart';
 
 class SetlistPdfService {
+  /// Web-App: So lange darf das schnelle Zusammensetzen des Notenhefts dauern,
+  /// bevor der langsamere Weg übernimmt.
+  static Duration webMergeTimeout = const Duration(seconds: 40);
+
+  /// Ob das zuletzt erzeugte Notenheft über den langsameren Weg entstand.
+  static bool usedSlowPath = false;
+
   /// Generates a clean, professional A4 PDF overview (program / cue sheet)
   /// of the setlist with title, date, list of pieces, custom notes, and intermissions.
   static Future<File> generateSetlistOverviewPdf(Setlist setlist) async {
@@ -250,6 +257,7 @@ class SetlistPdfService {
     NextcloudService? nextcloudService,
     void Function(int current, int total, String status)? onProgress,
   }) async {
+    usedSlowPath = false;
     final allSongs = storageService.getCachedSongs();
     final mergedDoc = PdfDocument();
 
@@ -489,22 +497,32 @@ class SetlistPdfService {
       // Noten für eine halbe Minute und länger ein.
       onProgress?.call(playableCount, playableCount, 'Füge Noten zusammen...');
       await Future<void>.delayed(const Duration(milliseconds: 50));
-      final coverBytes = Uint8List.fromList(await mergedDoc.save());
-      mergedDoc.dispose();
-      final merged = await _mergePdfs([
-        coverBytes,
-        for (final info in collected)
-          if (!info.item.isIntermission && info.pdfBytes != null) info.pdfBytes!,
-      ]);
-      return GeneratedPdf(fileName, merged);
+      try {
+        final coverBytes = Uint8List.fromList(await mergedDoc.save());
+        final merged = await _mergePdfs([
+          coverBytes,
+          for (final info in collected)
+            if (!info.item.isIntermission && info.pdfBytes != null) info.pdfBytes!,
+        ]).timeout(webMergeTimeout);
+        mergedDoc.dispose();
+        return GeneratedPdf(fileName, merged);
+      } catch (_) {
+        // Schneller Weg fehlgeschlagen oder ohne Antwort (auf dem iPad
+        // beobachtet): Weiter mit dem langsameren Weg unten, damit das Heft
+        // auf jeden Fall entsteht.
+        usedSlowPath = true;
+      }
     }
 
     // 3. Second Pass: append each sheet music piece PDF into mergedDoc
+    final slowHint = kIsWeb ? ' (langsamer Weg)' : '';
     int currentPieceNum = 0;
     for (final info in collected) {
       if (info.item.isIntermission || info.pdfBytes == null) continue;
       currentPieceNum++;
-      onProgress?.call(currentPieceNum, playableCount, 'Füge "${info.item.songTitle}" hinzu...');
+      onProgress?.call(currentPieceNum, playableCount, 'Füge "${info.item.songTitle}" hinzu$slowHint...');
+      // Im Browser läuft alles in einem Strang: kurz abgeben, damit die Anzeige mitkommt.
+      if (kIsWeb) await Future<void>.delayed(const Duration(milliseconds: 20));
 
       {
         try {
@@ -524,7 +542,12 @@ class SetlistPdfService {
       }
     }
 
-    onProgress?.call(playableCount, playableCount, 'Speichere Notenheft...');
+    onProgress?.call(
+      playableCount,
+      playableCount,
+      kIsWeb ? 'Speichere Notenheft – das kann ein bis zwei Minuten dauern, bitte warten...' : 'Speichere Notenheft...',
+    );
+    if (kIsWeb) await Future<void>.delayed(const Duration(milliseconds: 50));
     final bytes = await mergedDoc.save();
     mergedDoc.dispose();
 

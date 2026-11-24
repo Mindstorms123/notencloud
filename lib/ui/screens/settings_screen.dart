@@ -1869,7 +1869,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Kein externes Pedal erkannt. Kopple dein Fußpedal über die Bluetooth-Einstellungen deines Geräts.',
+                        kIsWeb
+                            ? 'Kopple dein Fußpedal in den Bluetooth-Einstellungen deines Geräts (iPad: Einstellungen › Bluetooth). Die Web-App kann gekoppelte Geräte nicht anzeigen, reagiert aber auf die Tasten des Pedals.'
+                            : 'Kein externes Pedal erkannt. Kopple dein Fußpedal über die Bluetooth-Einstellungen deines Geräts.',
                         style: TextStyle(fontSize: 12, color: AppTheme.darkTextSecondary),
                       ),
                     ),
@@ -1879,8 +1881,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 12),
             ],
 
-            // Button to open system Bluetooth settings
-            OutlinedButton.icon(
+            // Button to open system Bluetooth settings (nicht in der Web-App:
+            // Ein Browser kann die Systemeinstellungen nicht öffnen)
+            if (!kIsWeb) OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.primaryLight,
                 side: BorderSide(color: AppTheme.primaryLight.withValues(alpha: 0.4)),
