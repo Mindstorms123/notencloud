@@ -5,6 +5,7 @@ import '../../models/song.dart';
 import '../../services/digitization_service.dart';
 import '../../services/edition_lookup_service.dart';
 import '../../services/nextcloud_service.dart';
+import '../../services/setlist_pdf_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
 
@@ -345,17 +346,18 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
   Future<void> _exportPdf() async {
     setState(() => _isExporting = true);
     try {
-      final file = await DigitizationService.generateAuditPdf(
+      final pdf = await DigitizationService.buildAuditPdf(
         _filteredReports,
         categoryFilter: _selectedCategory,
         instrumentFilter: _selectedInstrument,
       );
+      final shareFile = await SetlistPdfService.toShareFile(pdf);
 
       if (mounted) {
         setState(() => _isExporting = false);
         await SharePlus.instance.share(
           ShareParams(
-            files: [XFile(file.path, mimeType: 'application/pdf')],
+            files: [shareFile],
             text: 'Fehlende Noten Digitalisierungs-Liste (Blasorchester 1862)',
           ),
         );

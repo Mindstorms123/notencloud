@@ -1,10 +1,11 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/song.dart';
 import 'edition_lookup_service.dart';
+import 'setlist_pdf_service.dart';
 import 'voice_matcher.dart';
 
 enum AuditMode {
@@ -612,6 +613,22 @@ class DigitizationService {
     String? instrumentFilter,
     String orchestraName = 'Blasorchester 1862',
   }) async {
+    return SetlistPdfService.writeToTempFile(await buildAuditPdf(
+      reports,
+      categoryFilter: categoryFilter,
+      instrumentFilter: instrumentFilter,
+      orchestraName: orchestraName,
+    ));
+  }
+
+  /// Wie [generateAuditPdf], liefert das PDF aber im Speicher (für die Web-App,
+  /// die keinen temporären Ordner kennt).
+  static Future<GeneratedPdf> buildAuditPdf(
+    List<SongDigitizationReport> reports, {
+    String? categoryFilter,
+    String? instrumentFilter,
+    String orchestraName = 'Blasorchester 1862',
+  }) async {
     final filtered = reports.where((r) {
       if (categoryFilter != null && categoryFilter.isNotEmpty && categoryFilter != 'Alle Kategorien') {
         if (r.song.category != categoryFilter) return false;
@@ -742,13 +759,8 @@ class DigitizationService {
       itemIndex++;
     }
 
-    // Save to temp file
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/Fehlende_Noten_Digitalisierung_$dateStr.pdf');
     final bytes = await document.save();
     document.dispose();
-
-    await file.writeAsBytes(bytes);
-    return file;
+    return GeneratedPdf('Fehlende_Noten_Digitalisierung_$dateStr.pdf', Uint8List.fromList(bytes));
   }
 }

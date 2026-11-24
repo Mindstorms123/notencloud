@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // Messung/Prüfung des Notenhefts im Browser. Aufruf:
 //   (cd build/web && python3 <Server mit CORS> 8794) &
 //   CHROME_EXECUTABLE=/usr/bin/google-chrome flutter test --platform chrome test/perf/booklet_web_perf_test.dart

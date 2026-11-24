@@ -9,7 +9,7 @@ import '../../services/konzertmeister_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/profile_setup_dialog.dart';
+import '../widgets/first_run_guide.dart';
 import 'main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -585,8 +585,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _navigateToMain() async {
-    // Erste Anmeldung: Instrument und Stimme abfragen, bevor es losgeht.
-    await ProfileSetupDialog.showIfNeeded(context, widget.storageService);
+    // Erste Anmeldung: durch Notenarchiv, Instrument und Startordner führen.
+    final account = widget.storageService.getAccount();
+    await FirstRunGuide.showIfNeeded(
+      context,
+      widget.storageService,
+      loadLibrary: account.isValidated
+          ? (onProgress) => NextcloudService(account).scanLibrary(
+                existingCachedSongs: widget.storageService.getCachedSongs(),
+                onProgress: onProgress,
+              )
+          : null,
+    );
     if (!mounted) return;
     Navigator.pushReplacement(
       context,
