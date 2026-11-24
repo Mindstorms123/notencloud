@@ -41,6 +41,41 @@
 </head>
 <body>
   <script>
+    // Der Browser verschiebt die Seite, wenn ein Textfeld den Fokus bekommt
+    // (Suche, Anmeldung, Bildschirmtastatur) – auch bei "overflow: hidden".
+    // Flutter merkt das nicht: Die Knöpfe werden weiter an der alten Stelle
+    // gezeichnet, reagieren aber versetzt (man muss darüber tippen).
+    // Deshalb die Seite wieder an den Anfang schieben, sobald nichts mehr
+    // eingegeben wird; am Rechner ohne Bildschirmtastatur sofort.
+    (function () {
+      var editing = false;
+      var touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      function isField(e) {
+        var t = e.composedPath ? e.composedPath()[0] : e.target;
+        return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+      }
+      function reset() {
+        if (touch && editing) return;
+        if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+        var d = document.documentElement, b = document.body;
+        if (d.scrollTop || d.scrollLeft) { d.scrollTop = 0; d.scrollLeft = 0; }
+        if (b && (b.scrollTop || b.scrollLeft)) { b.scrollTop = 0; b.scrollLeft = 0; }
+      }
+      function later(ms) { return function () { setTimeout(reset, ms); }; }
+      document.addEventListener('focusin', function (e) { if (isField(e)) editing = true; }, true);
+      document.addEventListener('focusout', function (e) {
+        if (!isField(e)) return;
+        editing = false;
+        setTimeout(reset, 100);
+        setTimeout(reset, 500);
+      }, true);
+      window.addEventListener('scroll', later(0), { passive: true });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', later(150));
+      window.addEventListener('orientationchange', later(400));
+      window.addEventListener('pageshow', later(0));
+    })();
+  </script>
+  <script>
     // Offline-Betrieb: App-Dateien im Browser vorhalten (siehe sw.js).
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
