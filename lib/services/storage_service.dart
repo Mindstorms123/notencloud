@@ -364,6 +364,36 @@ class StorageService {
     }
   }
 
+  static const _prefPartRotationsKey = 'part_rotations';
+
+  /// Um wie viele Vierteldrehungen (im Uhrzeigersinn) die Noten einer Stimme
+  /// gedreht angezeigt werden – für Scans, die quer oder kopfüber abgelegt sind.
+  int getPartRotation(String partId) {
+    try {
+      final raw = _prefs.getString(_prefPartRotationsKey);
+      if (raw == null) return 0;
+      final value = (jsonDecode(raw) as Map<String, dynamic>)[partId];
+      return value is int ? value % 4 : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> setPartRotation(String partId, int quarterTurns) async {
+    Map<String, dynamic> map = {};
+    try {
+      final raw = _prefs.getString(_prefPartRotationsKey);
+      if (raw != null) map = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {}
+    final turns = quarterTurns % 4;
+    if (turns == 0) {
+      map.remove(partId);
+    } else {
+      map[partId] = turns;
+    }
+    await _prefs.setString(_prefPartRotationsKey, jsonEncode(map));
+  }
+
   static const _prefLegacyPartIdsKey = 'legacy_part_ids';
   Map<String, List<String>>? _legacyPartIds;
 

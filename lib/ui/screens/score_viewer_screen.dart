@@ -79,6 +79,11 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   bool _isFitWidth = true;
   bool _isCloudSyncing = false;
   bool _isCloudSynced = false;
+
+  /// Anzeige-Drehung der aktuellen Stimme in Vierteldrehungen im Uhrzeigersinn.
+  int _rotationTurns = 0;
+  PdfDocument? _viewerDocument;
+  final Expando<bool> _rotationApplied = Expando<bool>();
   bool _uploadErrorShown = false;
 
   // Bluetooth Foot Pedal (Page Turner) state
@@ -360,6 +365,45 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         }
       } catch (_) {}
     }
+  }
+
+  /// Wendet die gespeicherte Drehung einmal je geladenem Dokument an.
+  void _applyStoredRotation(PdfDocument document) {
+    _viewerDocument = document;
+    if (_rotationApplied[document] == true) return;
+    _rotationApplied[document] = true;
+    final turns = widget.storageService.getPartRotation(_currentPart.id);
+    if (turns != 0) {
+      document.pages =
+          document.pages.map((p) => p.rotatedBy(PdfPageRotation.values[turns])).toList();
+    }
+    if (turns != _rotationTurns) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _rotationTurns = turns);
+      });
+    }
+  }
+
+  /// Dreht die Noten dieser Stimme um 90° im Uhrzeigersinn und merkt sich das.
+  void _rotatePages() {
+    final document = _viewerDocument;
+    if (document == null) return;
+    document.pages = document.pages.map((p) => p.rotatedCW90()).toList();
+    final turns = (_rotationTurns + 1) % 4;
+    widget.storageService.setPartRotation(_currentPart.id, turns);
+    setState(() {
+      _rotationTurns = turns;
+      _baseFitZoom = null;
+    });
+    // Nach dem neuen Seitenlayout wieder einpassen.
+    Future<void>.delayed(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      try {
+        final matrix = _pdfController!.calcMatrixFitWidthForPage(pageNumber: _currentPage) ??
+            _pdfController!.calcMatrixForFit(pageNumber: _currentPage);
+        if (matrix != null) _pdfController!.goTo(matrix);
+      } catch (_) {}
+    });
   }
 
   Future<void> _preparePdf() async {
@@ -706,6 +750,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       },
       onViewerReady: (document, controller) {
         if (mounted) {
+          _applyStoredRotation(document);
           setState(() {
             _isViewerReady = true;
             try {
@@ -725,6 +770,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       },
       onDocumentChanged: (document) {
         if (document != null && mounted) {
+          _applyStoredRotation(document);
           setState(() {
             _pageCount = document.pages.length;
           });
@@ -740,14 +786,22 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
             top: 0,
             width: pageRect.width,
             height: pageRect.height,
-            child: AnnotationCanvas(
+            // Notizen sind in den Koordinaten der ungedrehten Seite gespeichert
+            // (auf jedem Gerät gleich). Bei gedrehter Anzeige die Zeichenfläche
+            // mitdrehen, damit Striche auf den Noten bleiben.
+            child: RotatedBox(
+              quarterTurns: _rotationTurns,
+              child: AnnotationCanvas(
               annotations: currentAnn,
               isDrawingActive: _isDrawingActive,
               activeTool: _activeTool,
               activeColor: _activeColor,
               activeStrokeWidth: _activeStrokeWidth,
-              pageSize: Size(pageRect.width, pageRect.height),
+              pageSize: _rotationTurns.isOdd
+                  ? Size(pageRect.height, pageRect.width)
+                  : Size(pageRect.width, pageRect.height),
               onAnnotationsChanged: _onAnnotationsChanged,
+            ),
             ),
           ),
         ];
@@ -862,6 +916,12 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                     tooltip: 'Bluetooth-Fußpedal aktiv (${_pedalSettings.mode == PedalMode.universal ? "Universal" : _pedalSettings.mode.name})',
                     onPressed: _showPedalQuickSheet,
                   ),
+                // Noten drehen (falsch herum oder quer eingescannt)
+                IconButton(
+                  icon: const Icon(Icons.rotate_90_degrees_cw_rounded),
+                  tooltip: 'Noten drehen',
+                  onPressed: _isViewerReady ? _rotatePages : null,
+                ),
                 // Voice selector button
                 IconButton(
                   icon: const Icon(Icons.queue_music_rounded, color: AppTheme.primaryLight),
