@@ -65,6 +65,14 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   bool _isViewerReady = false;
   String? _localPdfPath;
   Uint8List? _pdfBytes;
+
+  /// Name, unter dem der Betrachter [_pdfBytes] führt. Wird nur zusammen mit
+  /// den Bytes gesetzt: Der Betrachter erkennt ein Dokument am Namen, und mit
+  /// dem Namen des neuen Stücks zu den Bytes des alten zeigte er nach dem
+  /// Weiterblättern weiter das alte Stück. Der Betrachter bleibt beim Wechsel
+  /// bewusst eingehängt (kein Key, kein Leeren der Bytes) – neu aufgebaut
+  /// meldete er sich im Bühnenmodus nicht mehr als bereit.
+  String? _pdfSourceName;
   String? _errorMessage;
   bool _isFullscreen = false;
   double? _baseFitZoom;
@@ -359,25 +367,25 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _isViewerReady = false;
       _errorMessage = null;
       _baseFitZoom = null;
-      // Web: Die Noten des vorigen Stücks verwerfen. Sonst öffnet der Betrachter
-      // sie unter dem Namen des neuen Stücks und zeigt danach weiter das alte.
-      // Der Betrachter bekommt bewusst keinen eigenen Key: Zwei Instanzen im
-      // selben Bild teilen sich den Controller, und die alte würde ihn beim
-      // Abbau wieder lösen – dann meldet sich die neue nie als bereit.
-      if (kIsWeb) _pdfBytes = null;
     });
 
     try {
       if (kIsWeb) {
         // Web PWA: Check in-memory/session score cache first
-        final cached = widget.storageService.getCachedPartBytes(
-          _currentSong.id,
-          _currentPart.fileName,
-        );
+        final song = _currentSong;
+        final part = _currentPart;
+        final cached = await widget.storageService.loadPartBytes(song.id, part.fileName);
+        // Inzwischen weitergeblättert: Dieses Ergebnis gehört zu einem anderen Stück.
+        if (!identical(part, _currentPart)) return;
         if (cached != null) {
           if (mounted) {
+            final sourceName = '${song.id}_${part.fileName}';
             setState(() {
+              // Dasselbe Dokument wie bisher: Der Betrachter lädt nicht neu und
+              // meldet sich deshalb auch nicht erneut als bereit.
+              if (_pdfSourceName == sourceName) _isViewerReady = true;
               _pdfBytes = cached;
+              _pdfSourceName = sourceName;
               _isLoadingPdf = false;
             });
             _loadPageAnnotations(1);
@@ -386,11 +394,18 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         }
 
         if (widget.nextcloudService != null) {
-          final bytes = await widget.nextcloudService!.downloadPartBytes(_currentPart);
-          widget.storageService.cachePartBytes(_currentSong.id, _currentPart.fileName, bytes);
+          final bytes = await widget.nextcloudService!.downloadPartBytes(part);
+          widget.storageService.cachePartBytes(song.id, part.fileName, bytes);
+          // Inzwischen weitergeblättert: Dieses Ergebnis gehört zu einem anderen Stück.
+          if (!identical(part, _currentPart)) return;
           if (mounted) {
+            final sourceName = '${song.id}_${part.fileName}';
             setState(() {
+              // Dasselbe Dokument wie bisher: Der Betrachter lädt nicht neu und
+              // meldet sich deshalb auch nicht erneut als bereit.
+              if (_pdfSourceName == sourceName) _isViewerReady = true;
               _pdfBytes = bytes;
+              _pdfSourceName = sourceName;
               _isLoadingPdf = false;
             });
             _loadPageAnnotations(1);
@@ -890,7 +905,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
           else if (kIsWeb && _pdfBytes != null)
             PdfViewer.data(
               _pdfBytes!,
-              sourceName: '${_currentSong.id}_${_currentPart.fileName}',
+              sourceName: _pdfSourceName ?? '${_currentSong.id}_${_currentPart.fileName}',
               controller: _pdfController,
               params: _buildViewerParams(currentAnn),
             )

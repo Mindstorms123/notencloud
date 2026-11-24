@@ -40,6 +40,14 @@
   </style>
 </head>
 <body>
+  <script>
+    // Offline-Betrieb: App-Dateien im Browser vorhalten (siehe sw.js).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

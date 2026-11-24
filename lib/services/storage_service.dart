@@ -12,6 +12,7 @@ import '../models/setlist.dart';
 import '../models/konzertmeister_appointment.dart';
 import 'konzertmeister_service.dart';
 import 'voice_matcher.dart';
+import 'web_score_store_stub.dart' if (dart.library.js_interop) 'web_score_store_web.dart';
 
 class StorageService {
   static const _prefProfileKey = 'musician_profile';
@@ -39,7 +40,9 @@ class StorageService {
 
   static Future<StorageService> init() async {
     final prefs = await SharedPreferences.getInstance();
-    return StorageService(prefs);
+    final service = StorageService(prefs);
+    await service._loadWebScoreIndex();
+    return service;
   }
 
   // --- Digitization Audit Filter Preferences ---
@@ -129,16 +132,57 @@ class StorageService {
   // --- Web-safe in-memory score cache ---
   final Map<String, Uint8List> _webScoreCache = {};
 
-  void cachePartBytes(String songId, String fileName, Uint8List bytes) {
-    _webScoreCache['${songId}_$fileName'] = bytes;
+  /// Web-App: dauerhafte Ablage der heruntergeladenen Noten im Browser.
+  /// [_webStoredKeys] ist das beim Start geladene Verzeichnis dieser Ablage.
+  final WebScoreStore _webScoreStore = WebScoreStore();
+  final Set<String> _webStoredKeys = {};
+
+  Future<void> _loadWebScoreIndex() async {
+    if (!kIsWeb) return;
+    try {
+      _webStoredKeys.addAll(await _webScoreStore.keys());
+    } catch (_) {
+      // Ablage nicht verfügbar (z. B. privater Modus): Noten bleiben im Arbeitsspeicher.
+    }
   }
 
+  void cachePartBytes(String songId, String fileName, Uint8List bytes) {
+    final key = '${songId}_$fileName';
+    _webScoreCache[key] = bytes;
+    if (kIsWeb) {
+      _webScoreStore.write(key, bytes).then((_) {
+        _webStoredKeys.add(key);
+      }).catchError((_) {});
+    }
+  }
+
+  /// Nur der Arbeitsspeicher. Für Noten aus der dauerhaften Ablage [loadPartBytes] nutzen.
   Uint8List? getCachedPartBytes(String songId, String fileName) {
     return _webScoreCache['${songId}_$fileName'];
   }
 
+  /// Web-App: Noten aus dem Arbeitsspeicher oder der dauerhaften Ablage.
+  Future<Uint8List?> loadPartBytes(String songId, String fileName) async {
+    final key = '${songId}_$fileName';
+    final inMemory = _webScoreCache[key];
+    if (inMemory != null) return inMemory;
+    if (!kIsWeb || !_webStoredKeys.contains(key)) return null;
+    try {
+      final bytes = await _webScoreStore.read(key);
+      if (bytes != null) {
+        _webScoreCache[key] = bytes;
+      } else {
+        _webStoredKeys.remove(key);
+      }
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool hasCachedPartBytes(String songId, String fileName) {
-    return _webScoreCache.containsKey('${songId}_$fileName');
+    final key = '${songId}_$fileName';
+    return _webScoreCache.containsKey(key) || _webStoredKeys.contains(key);
   }
 
   String? getWebAnnotation(String songId, String partId, int pageIndex) {

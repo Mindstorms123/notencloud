@@ -223,7 +223,7 @@ class SetlistPdfService {
     void Function()? onDownloadStart,
   }) async {
     if (kIsWeb) {
-      final cached = storageService.getCachedPartBytes(song.id, part.fileName);
+      final cached = await storageService.loadPartBytes(song.id, part.fileName);
       if (cached != null) return cached;
       if (nextcloudService == null) return null;
       onDownloadStart?.call();
