@@ -1704,6 +1704,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          if (kIsWeb) ...[
+            // Web-App: zeigt, welche Fassung läuft, und lädt die neueste nach.
+            // In der installierten Web-App gibt es sonst keinen Neuladen-Knopf.
+            Center(
+              child: Column(
+                children: [
+                  const Text(
+                    'Web-Fassung ${NextcloudService.webBuild}',
+                    style: TextStyle(fontSize: 12, color: AppTheme.darkTextMuted),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => launchUrl(Uri.base, webOnlyWindowName: '_self'),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Neueste Fassung laden'),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 32),
         ],
       ),

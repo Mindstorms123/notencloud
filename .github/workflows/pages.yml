@@ -35,7 +35,7 @@ jobs:
         env:
           PROXY_URL: ${{ vars.NOTENCLOUD_PROXY_URL }}
         run: |
-          args=()
+          args=("--dart-define=NOTENCLOUD_BUILD=${GITHUB_SHA::8}")
           if [ -n "$PROXY_URL" ]; then
             args+=("--dart-define=NOTENCLOUD_PROXY_URL=$PROXY_URL")
           fi

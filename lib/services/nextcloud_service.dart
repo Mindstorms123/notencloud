@@ -37,6 +37,9 @@ class NextcloudService {
     defaultValue: 'proxy.php',
   );
 
+  /// Kennung des Web-Builds (Commit), beim Bauen gesetzt: `--dart-define=NOTENCLOUD_BUILD=…`
+  static const String webBuild = String.fromEnvironment('NOTENCLOUD_BUILD', defaultValue: 'lokal');
+
   /// Resolves the URL for WebDAV requests.
   /// When running in browser (Web PWA), routes requests through the CORS proxy
   /// to bypass Hetzner Storage Share CORS restrictions.

@@ -61,7 +61,20 @@ self.addEventListener('fetch', (event) => {
     // Startseite: möglichst frisch, ohne Netz (oder bei hängendem Netz) aus dem Speicher.
     event.respondWith((async () => {
       try {
-        return await fromNetwork(request, 4000);
+        // Am Zwischenspeicher des Browsers vorbei, damit eine neue Fassung
+        // beim nächsten Öffnen sofort da ist.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        try {
+          const response = await fetch(request.url, { cache: 'no-store', signal: controller.signal });
+          if (response.ok) {
+            const cache = await caches.open(CACHE);
+            cache.put('./', response.clone()).catch(() => {});
+          }
+          return response;
+        } finally {
+          clearTimeout(timer);
+        }
       } catch (_) {
         const cache = await caches.open(CACHE);
         return (await cache.match('./')) || (await cache.match('index.html')) || Response.error();
