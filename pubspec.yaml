@@ -47,6 +47,7 @@ dependencies:
   package_info_plus: ^10.2.2
   pdf: ^3.13.1
   syncfusion_flutter_pdf: ^35.1.43
+  archive: ^4.7.1
 
 dev_dependencies:
   flutter_test:

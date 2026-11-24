@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -284,8 +285,28 @@ class StorageService {
 
   // --- Cached Songs Index ---
 
+  /// Web-App: Der Browser-Speicher (localStorage) fasst nur rund 5 MB. Das
+  /// Notenverzeichnis eines Vereins ist größer, deshalb liegt es dort
+  /// komprimiert und zusätzlich für die laufende Sitzung im Arbeitsspeicher.
+  static const _prefSongsCacheGzKey = 'cached_songs_index_gz';
+  String? _songsCacheMemory;
+
+  String? _readSongsCacheJson() {
+    if (_songsCacheMemory != null) return _songsCacheMemory;
+    if (kIsWeb) {
+      final packed = _prefs.getString(_prefSongsCacheGzKey);
+      if (packed != null) {
+        try {
+          return _songsCacheMemory =
+              utf8.decode(GZipDecoder().decodeBytes(base64.decode(packed)));
+        } catch (_) {}
+      }
+    }
+    return _prefs.getString(_prefSongsCacheKey);
+  }
+
   List<Song> getCachedSongs() {
-    final jsonStr = _prefs.getString(_prefSongsCacheKey);
+    final jsonStr = _readSongsCacheJson();
     if (jsonStr == null) return [];
     try {
       final list = jsonDecode(jsonStr) as List<dynamic>;
@@ -321,7 +342,23 @@ class StorageService {
 
   Future<void> saveCachedSongs(List<Song> songs) async {
     final list = songs.map((s) => s.toJson()).toList();
-    await _prefs.setString(_prefSongsCacheKey, jsonEncode(list));
+    final jsonStr = jsonEncode(list);
+    if (!kIsWeb) {
+      await _prefs.setString(_prefSongsCacheKey, jsonStr);
+      return;
+    }
+    _songsCacheMemory = jsonStr;
+    try {
+      await _prefs.remove(_prefSongsCacheKey);
+      final packed = base64.encode(GZipEncoder().encodeBytes(utf8.encode(jsonStr)));
+      await _prefs.setString(_prefSongsCacheGzKey, packed);
+    } catch (_) {
+      // Speicher des Browsers voll: Das Verzeichnis bleibt für diese Sitzung
+      // im Arbeitsspeicher und wird beim nächsten Start neu geladen.
+      try {
+        await _prefs.remove(_prefSongsCacheGzKey);
+      } catch (_) {}
+    }
   }
 
   // --- Setlists Cache & Local Setlists ---
