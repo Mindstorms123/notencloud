@@ -48,7 +48,7 @@ flutter test test/web_pwa_test.dart
 # 3. Flutter Web Release kompilieren
 echo ""
 echo "🚀 [3/4] Flutter Web Release kompilieren..."
-flutter build web --release
+flutter build web --release --no-web-resources-cdn
 
 # Webhosting-Dateien (.htaccess, CORS-Proxy, Unzip-Helfer) sicherstellen
 cp "$ROOT_DIR/web/.htaccess" "$ROOT_DIR/build/web/.htaccess" 2>/dev/null || true
