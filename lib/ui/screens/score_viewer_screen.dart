@@ -361,6 +361,9 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       _baseFitZoom = null;
       // Web: Die Noten des vorigen Stücks verwerfen. Sonst öffnet der Betrachter
       // sie unter dem Namen des neuen Stücks und zeigt danach weiter das alte.
+      // Der Betrachter bekommt bewusst keinen eigenen Key: Zwei Instanzen im
+      // selben Bild teilen sich den Controller, und die alte würde ihn beim
+      // Abbau wieder lösen – dann meldet sich die neue nie als bereit.
       if (kIsWeb) _pdfBytes = null;
     });
 
@@ -887,7 +890,6 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
           else if (kIsWeb && _pdfBytes != null)
             PdfViewer.data(
               _pdfBytes!,
-              key: ValueKey('${_currentSong.id}_${_currentPart.fileName}'),
               sourceName: '${_currentSong.id}_${_currentPart.fileName}',
               controller: _pdfController,
               params: _buildViewerParams(currentAnn),
