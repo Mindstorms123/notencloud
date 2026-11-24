@@ -1513,8 +1513,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // App Updates & ADB Pixel Fast-Installer Card
-          Material(
+          // App Updates & ADB Pixel Fast-Installer Card (nicht in der Web-App:
+          // dort gibt es keine APK, die Seite aktualisiert sich selbst)
+          if (!kIsWeb) Material(
             color: isDark ? AppTheme.darkCard : AppTheme.lightCard,
             borderRadius: BorderRadius.circular(20),
             clipBehavior: Clip.antiAlias,

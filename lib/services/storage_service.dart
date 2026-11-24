@@ -97,6 +97,9 @@ class StorageService {
     }
   }
 
+  /// Ob die Person ihr Instrument schon einmal gewählt hat (sonst gilt das Standardprofil).
+  bool hasSavedProfile() => _prefs.containsKey(_prefProfileKey);
+
   Future<void> saveProfile(MusicianProfile profile) async {
     await _prefs.setString(_prefProfileKey, jsonEncode(profile.toJson()));
   }

@@ -9,6 +9,7 @@ import '../../services/konzertmeister_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/profile_setup_dialog.dart';
 import 'main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -583,7 +584,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _navigateToMain() {
+  Future<void> _navigateToMain() async {
+    // Erste Anmeldung: Instrument und Stimme abfragen, bevor es losgeht.
+    await ProfileSetupDialog.showIfNeeded(context, widget.storageService);
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
