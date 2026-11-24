@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart' show XFile;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/musician_profile.dart';
 import '../models/setlist.dart';
@@ -14,6 +17,28 @@ class SetlistPdfService {
   /// Generates a clean, professional A4 PDF overview (program / cue sheet)
   /// of the setlist with title, date, list of pieces, custom notes, and intermissions.
   static Future<File> generateSetlistOverviewPdf(Setlist setlist) async {
+    return writeToTempFile(await buildSetlistOverviewPdf(setlist));
+  }
+
+  /// Schreibt ein erzeugtes PDF in den temporären Ordner (nicht in der Web-App).
+  static Future<File> writeToTempFile(GeneratedPdf pdf) async {
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/${pdf.name}');
+    await file.writeAsBytes(pdf.bytes, flush: true);
+    return file;
+  }
+
+  /// Datei zum Teilen: in der Web-App direkt aus dem Speicher (der Browser
+  /// kennt keinen temporären Ordner), sonst als temporäre Datei.
+  static Future<XFile> toShareFile(GeneratedPdf pdf) async {
+    if (kIsWeb) {
+      return XFile.fromData(pdf.bytes, name: pdf.name, mimeType: 'application/pdf');
+    }
+    return XFile((await writeToTempFile(pdf)).path);
+  }
+
+  /// Wie [generateSetlistOverviewPdf], liefert das PDF aber im Speicher.
+  static Future<GeneratedPdf> buildSetlistOverviewPdf(Setlist setlist) async {
     final document = PdfDocument();
     document.pageSettings.size = PdfPageSize.a4;
     document.pageSettings.margins.all = 36; // 0.5 inch margins
@@ -165,17 +190,59 @@ class SetlistPdfService {
     final bytes = await document.save();
     document.dispose();
 
-    final tempDir = await getTemporaryDirectory();
     final safeTitle = setlist.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
-    final file = File('${tempDir.path}/Setliste_$safeTitle.pdf');
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
+    return GeneratedPdf('Setliste_$safeTitle.pdf', Uint8List.fromList(bytes));
   }
 
   /// Generates a complete, merged Sheet Music Booklet for a guest / substitute musician ("Aushilfe").
   /// Includes a custom Table of Contents on Page 1 (with start page numbers for each piece)
   /// followed immediately by the sheet music PDFs for the chosen instrument/voice.
   static Future<File> generateAushilfeBookletPdf({
+    required Setlist setlist,
+    required MusicianProfile aushilfeProfile,
+    required StorageService storageService,
+    NextcloudService? nextcloudService,
+    void Function(int current, int total, String status)? onProgress,
+  }) async {
+    return writeToTempFile(await buildAushilfeBookletPdf(
+      setlist: setlist,
+      aushilfeProfile: aushilfeProfile,
+      storageService: storageService,
+      nextcloudService: nextcloudService,
+      onProgress: onProgress,
+    ));
+  }
+
+  /// Lädt die Noten einer Stimme: in der Web-App aus dem Sitzungsspeicher bzw.
+  /// direkt aus der Nextcloud, sonst aus der lokalen Datei (bei Bedarf geladen).
+  static Future<Uint8List?> _loadPartBytes({
+    required Song song,
+    required PartFile part,
+    required StorageService storageService,
+    NextcloudService? nextcloudService,
+    void Function()? onDownloadStart,
+  }) async {
+    if (kIsWeb) {
+      final cached = storageService.getCachedPartBytes(song.id, part.fileName);
+      if (cached != null) return cached;
+      if (nextcloudService == null) return null;
+      onDownloadStart?.call();
+      final bytes = await nextcloudService.downloadPartBytes(part);
+      storageService.cachePartBytes(song.id, part.fileName, bytes);
+      return bytes;
+    }
+    final localPdfPath = await storageService.getLocalPdfPath(song.id, part.fileName, part: part);
+    final file = File(localPdfPath);
+    if (!await file.exists() && nextcloudService != null) {
+      onDownloadStart?.call();
+      await nextcloudService.downloadPart(part, localPdfPath);
+    }
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  /// Wie [generateAushilfeBookletPdf], liefert das PDF aber im Speicher.
+  static Future<GeneratedPdf> buildAushilfeBookletPdf({
     required Setlist setlist,
     required MusicianProfile aushilfeProfile,
     required StorageService storageService,
@@ -205,7 +272,7 @@ class SetlistPdfService {
           isFallback: false,
           startPage: null,
           pageCount: 0,
-          localPdfPath: null,
+          pdfBytes: null,
         ));
         continue;
       }
@@ -224,29 +291,27 @@ class SetlistPdfService {
       final bestMatch = match?.part;
       final isFallback = match?.isFallback ?? false;
 
-      String? localPdfPath;
+      Uint8List? pdfBytes;
       int piecePages = 0;
 
       if (bestMatch != null) {
         try {
-          localPdfPath = await storageService.getLocalPdfPath(
-            song.id,
-            bestMatch.fileName,
+          pdfBytes = await _loadPartBytes(
+            song: song,
             part: bestMatch,
+            storageService: storageService,
+            nextcloudService: nextcloudService,
+            onDownloadStart: () =>
+                onProgress?.call(i + 1, totalItems, 'Lade Noten für "${song.title}"...'),
           );
-          final file = File(localPdfPath);
-          if (!await file.exists() && nextcloudService != null) {
-            onProgress?.call(i + 1, totalItems, 'Lade Noten für "${song.title}"...');
-            await nextcloudService.downloadPart(bestMatch, localPdfPath);
-          }
 
-          if (await file.exists()) {
-            final testDoc = PdfDocument(inputBytes: await file.readAsBytes());
+          if (pdfBytes != null) {
+            final testDoc = PdfDocument(inputBytes: pdfBytes);
             piecePages = testDoc.pages.count;
             testDoc.dispose();
           }
         } catch (_) {
-          localPdfPath = null;
+          pdfBytes = null;
           piecePages = 0;
         }
       }
@@ -263,7 +328,7 @@ class SetlistPdfService {
         isFallback: isFallback,
         startPage: startPage,
         pageCount: piecePages,
-        localPdfPath: localPdfPath,
+        pdfBytes: piecePages > 0 ? pdfBytes : null,
       ));
     }
 
@@ -416,14 +481,13 @@ class SetlistPdfService {
     // 3. Second Pass: append each sheet music piece PDF into mergedDoc
     int currentPieceNum = 0;
     for (final info in collected) {
-      if (info.item.isIntermission || info.localPdfPath == null) continue;
+      if (info.item.isIntermission || info.pdfBytes == null) continue;
       currentPieceNum++;
       onProgress?.call(currentPieceNum, playableCount, 'Füge "${info.item.songTitle}" hinzu...');
 
-      final file = File(info.localPdfPath!);
-      if (await file.exists()) {
+      {
         try {
-          final inputDoc = PdfDocument(inputBytes: await file.readAsBytes());
+          final inputDoc = PdfDocument(inputBytes: info.pdfBytes!);
           for (int p = 0; p < inputDoc.pages.count; p++) {
             final srcPage = inputDoc.pages[p];
             final section = mergedDoc.sections!.add();
@@ -443,14 +507,18 @@ class SetlistPdfService {
     final bytes = await mergedDoc.save();
     mergedDoc.dispose();
 
-    final tempDir = await getTemporaryDirectory();
     final safeTitle = setlist.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
     final safeVoice = aushilfeProfile.displayName.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
-    final finalFile = File('${tempDir.path}/Notenheft_${safeTitle}_$safeVoice.pdf');
-    await finalFile.writeAsBytes(bytes, flush: true);
-
-    return finalFile;
+    return GeneratedPdf('Notenheft_${safeTitle}_$safeVoice.pdf', Uint8List.fromList(bytes));
   }
+}
+
+/// Ein fertig erzeugtes PDF im Speicher, mit dem Dateinamen für Download/Teilen.
+class GeneratedPdf {
+  final String name;
+  final Uint8List bytes;
+
+  const GeneratedPdf(this.name, this.bytes);
 }
 
 class _AushilfeItemInfo {
@@ -460,7 +528,7 @@ class _AushilfeItemInfo {
   final bool isFallback;
   final int? startPage;
   final int pageCount;
-  final String? localPdfPath;
+  final Uint8List? pdfBytes;
 
   _AushilfeItemInfo({
     required this.item,
@@ -469,6 +537,6 @@ class _AushilfeItemInfo {
     required this.isFallback,
     required this.startPage,
     required this.pageCount,
-    required this.localPdfPath,
+    required this.pdfBytes,
   });
 }

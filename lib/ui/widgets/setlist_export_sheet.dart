@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/setlist.dart';
 import '../../services/nextcloud_service.dart';
@@ -78,13 +80,14 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
   Future<void> _shareOverviewPdf() async {
     setState(() => _isGeneratingOverview = true);
     try {
-      final file = await SetlistPdfService.generateSetlistOverviewPdf(widget.setlist);
+      final pdf = await SetlistPdfService.buildSetlistOverviewPdf(widget.setlist);
+      final shareFile = await SetlistPdfService.toShareFile(pdf);
       if (mounted) {
         setState(() => _isGeneratingOverview = false);
         Navigator.pop(context); // Close sheet
         await SharePlus.instance.share(
           ShareParams(
-            files: [XFile(file.path)],
+            files: [shareFile],
             text: 'Setliste & Ablaufplan: ${widget.setlist.title}',
           ),
         );
@@ -171,7 +174,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
     );
 
     try {
-      final file = await SetlistPdfService.generateAushilfeBookletPdf(
+      final pdf = await SetlistPdfService.buildAushilfeBookletPdf(
         setlist: widget.setlist,
         aushilfeProfile: _aushilfeProfile,
         storageService: widget.storageService,
@@ -183,6 +186,8 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
           dialogState?.call(() {});
         },
       );
+
+      final shareFile = await SetlistPdfService.toShareFile(pdf);
 
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
@@ -222,7 +227,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          file.path.split('/').last,
+                          pdf.name,
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -238,7 +243,12 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
                 label: const Text('Ansehen'),
                 onPressed: () {
                   Navigator.pop(ctx);
-                  OpenFilex.open(file.path);
+                  if (kIsWeb) {
+                    // Im Browser ist der Pfad eine Blob-Adresse des PDFs.
+                    launchUrl(Uri.parse(shareFile.path), webOnlyWindowName: '_blank');
+                  } else {
+                    OpenFilex.open(shareFile.path);
+                  }
                 },
               ),
               ElevatedButton.icon(
@@ -252,7 +262,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
                   Navigator.pop(ctx);
                   SharePlus.instance.share(
                     ShareParams(
-                      files: [XFile(file.path)],
+                      files: [shareFile],
                       text: 'Notenheft für ${_aushilfeProfile.displayName} • ${widget.setlist.title}',
                     ),
                   );
