@@ -15,7 +15,7 @@ import 'storage_service.dart';
 import 'voice_matcher.dart';
 
 class SetlistPdfService {
-  /// Web-App: So lange darf das schnelle Zusammensetzen des Notenhefts dauern,
+  /// So lange darf das schnelle Zusammensetzen des Notenhefts dauern,
   /// bevor der langsamere Weg übernimmt.
   static Duration webMergeTimeout = const Duration(seconds: 40);
 
@@ -495,10 +495,11 @@ class SetlistPdfService {
     final safeVoice = aushilfeProfile.displayName.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
     final fileName = 'Notenheft_${safeTitle}_$safeVoice.pdf';
 
-    if (kIsWeb) {
-      // Web-App: Seiten direkt zusammensetzen statt jede Seite neu zu zeichnen
-      // und zu komprimieren. Der Weg unten friert den Browser bei gestochenen
-      // Noten für eine halbe Minute und länger ein.
+    {
+      // Seiten direkt zusammensetzen (PDFium) statt jede Seite neu zu zeichnen
+      // und zu komprimieren. Der Weg unten rechnet bei gestochenen Noten eine
+      // halbe Minute und länger im Oberflächen-Strang: Im Browser wie auf dem
+      // Handy sieht das aus, als bliebe die App bei „Speichere Notenheft“ hängen.
       Future<void> step(String status) async {
         onProgress?.call(playableCount, playableCount, status);
         // Kurz abgeben, damit die Anzeige den Schritt zeigt, bevor er läuft.
@@ -525,14 +526,14 @@ class SetlistPdfService {
     }
 
     // 3. Second Pass: append each sheet music piece PDF into mergedDoc
-    final slowHint = kIsWeb ? ' (langsamer Weg${fastPathError == null ? '' : ', weil: $fastPathError'})' : '';
+    final slowHint = ' (langsamer Weg${fastPathError == null ? '' : ', weil: $fastPathError'})';
     int currentPieceNum = 0;
     for (final info in collected) {
       if (info.item.isIntermission || info.pdfBytes == null) continue;
       currentPieceNum++;
       onProgress?.call(currentPieceNum, playableCount, 'Füge "${info.item.songTitle}" hinzu$slowHint...');
       // Im Browser läuft alles in einem Strang: kurz abgeben, damit die Anzeige mitkommt.
-      if (kIsWeb) await Future<void>.delayed(const Duration(milliseconds: 20));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
       {
         try {
@@ -555,9 +556,9 @@ class SetlistPdfService {
     onProgress?.call(
       playableCount,
       playableCount,
-      kIsWeb ? 'Speichere Notenheft – das kann ein bis zwei Minuten dauern, bitte warten...' : 'Speichere Notenheft...',
+      'Speichere Notenheft – das kann ein bis zwei Minuten dauern, bitte warten...',
     );
-    if (kIsWeb) await Future<void>.delayed(const Duration(milliseconds: 50));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     final bytes = await mergedDoc.save();
     mergedDoc.dispose();
 

@@ -760,7 +760,12 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: _showAddSongSheet,
+                            // Leere Setlist: Der erste Schritt schaltet gleich ins
+                            // Bearbeiten, damit danach auch „Pause“ erreichbar ist.
+                            onPressed: () {
+                              setState(() => _isEditing = true);
+                              _showAddSongSheet();
+                            },
                             icon: const Icon(Icons.add_rounded),
                             label: const Text('Stück hinzufügen', style: TextStyle(fontWeight: FontWeight.bold)),
                           ),
@@ -1069,7 +1074,8 @@ class _SetlistDetailScreenState extends State<SetlistDetailScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: Container(
+      // Hinzufügen und Pause gehören zum Bearbeiten: nur im Bearbeiten-Modus zeigen.
+      bottomNavigationBar: !_isEditing ? null : Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
         decoration: const BoxDecoration(
           color: AppTheme.darkSurface,

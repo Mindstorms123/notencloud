@@ -183,6 +183,8 @@ void main() {
 
     expect(bookletFile.existsSync(), true);
     expect(bookletFile.lengthSync(), greaterThan(1000));
+    // ignore: avoid_print
+    print('Weg: ${SetlistPdfService.usedSlowPath ? "langsam, weil ${SetlistPdfService.fastPathError}" : "schnell (PDFium)"}');
 
     final bookletDoc = PdfDocument(inputBytes: await bookletFile.readAsBytes());
     // Cover page + at least 1 page
