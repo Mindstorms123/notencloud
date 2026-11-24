@@ -22,6 +22,9 @@ class SetlistPdfService {
   /// Ob das zuletzt erzeugte Notenheft über den langsameren Weg entstand.
   static bool usedSlowPath = false;
 
+  /// Warum der schnelle Weg zuletzt nicht geklappt hat (zur Fehlersuche).
+  static String? fastPathError;
+
   /// Generates a clean, professional A4 PDF overview (program / cue sheet)
   /// of the setlist with title, date, list of pieces, custom notes, and intermissions.
   static Future<File> generateSetlistOverviewPdf(Setlist setlist) async {
@@ -258,6 +261,7 @@ class SetlistPdfService {
     void Function(int current, int total, String status)? onProgress,
   }) async {
     usedSlowPath = false;
+    fastPathError = null;
     final allSongs = storageService.getCachedSongs();
     final mergedDoc = PdfDocument();
 
@@ -495,27 +499,33 @@ class SetlistPdfService {
       // Web-App: Seiten direkt zusammensetzen statt jede Seite neu zu zeichnen
       // und zu komprimieren. Der Weg unten friert den Browser bei gestochenen
       // Noten für eine halbe Minute und länger ein.
-      onProgress?.call(playableCount, playableCount, 'Füge Noten zusammen...');
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      Future<void> step(String status) async {
+        onProgress?.call(playableCount, playableCount, status);
+        // Kurz abgeben, damit die Anzeige den Schritt zeigt, bevor er läuft.
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+
       try {
+        await step('Schritt 1/4: Erstelle Deckblatt...');
         final coverBytes = Uint8List.fromList(await mergedDoc.save());
         final merged = await _mergePdfs([
           coverBytes,
           for (final info in collected)
             if (!info.item.isIntermission && info.pdfBytes != null) info.pdfBytes!,
-        ]).timeout(webMergeTimeout);
+        ], step).timeout(webMergeTimeout);
         mergedDoc.dispose();
         return GeneratedPdf(fileName, merged);
-      } catch (_) {
+      } catch (e) {
         // Schneller Weg fehlgeschlagen oder ohne Antwort (auf dem iPad
         // beobachtet): Weiter mit dem langsameren Weg unten, damit das Heft
-        // auf jeden Fall entsteht.
+        // auf jeden Fall entsteht. Der Grund bleibt in der Anzeige sichtbar.
         usedSlowPath = true;
+        fastPathError = e.toString();
       }
     }
 
     // 3. Second Pass: append each sheet music piece PDF into mergedDoc
-    final slowHint = kIsWeb ? ' (langsamer Weg)' : '';
+    final slowHint = kIsWeb ? ' (langsamer Weg${fastPathError == null ? '' : ', weil: $fastPathError'})' : '';
     int currentPieceNum = 0;
     for (final info in collected) {
       if (info.item.isIntermission || info.pdfBytes == null) continue;
@@ -556,7 +566,11 @@ class SetlistPdfService {
 
   /// Hängt fertige PDFs unverändert aneinander (PDFium), ohne ihre Inhalte
   /// neu zu kodieren.
-  static Future<Uint8List> _mergePdfs(List<Uint8List> documents) async {
+  static Future<Uint8List> _mergePdfs(
+    List<Uint8List> documents,
+    Future<void> Function(String status) step,
+  ) async {
+    await step('Schritt 2/4: Starte PDF-Modul...');
     await pdfrx.pdfrxFlutterInitialize();
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final sources = <pdfrx.PdfDocument>[];
@@ -564,10 +578,12 @@ class SetlistPdfService {
     try {
       final pages = <pdfrx.PdfPage>[];
       for (var i = 0; i < documents.length; i++) {
+        await step('Schritt 3/4: Öffne Noten ${i + 1} von ${documents.length}...');
         final doc = await pdfrx.PdfDocument.openData(documents[i], sourceName: 'notenheft-$stamp-teil-$i');
         sources.add(doc);
         pages.addAll(doc.pages);
       }
+      await step('Schritt 4/4: Setze ${pages.length} Seiten zusammen...');
       output.pages = pages;
       return await output.encodePdf();
     } finally {

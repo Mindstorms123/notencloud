@@ -187,6 +187,8 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
         },
       );
 
+      statusText = 'Bereite Datei zum Teilen vor...';
+      dialogState?.call(() {});
       final shareFile = await SetlistPdfService.toShareFile(pdf);
 
       if (mounted) {
@@ -275,8 +277,21 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppTheme.rose, content: Text('Fehler beim Erstellen des Notenhefts: $e')),
+        // Als eigenes Fenster: Eine Leiste am unteren Rand läge hinter diesem Blatt.
+        final failedStep = statusText;
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppTheme.darkCard,
+            title: const Text('Notenheft konnte nicht erstellt werden'),
+            content: SingleChildScrollView(
+              child: SelectableText(
+                'Schritt: $failedStep\n\nFehler: $e',
+                style: const TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
+              ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Schließen'))],
+          ),
         );
       }
     }
