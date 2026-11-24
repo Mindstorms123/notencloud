@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -180,7 +181,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final loginUri = Uri.parse(flow.loginUrl);
-    if (!await launchUrl(loginUri, mode: LaunchMode.externalApplication)) {
+    // Im Browser (Web-App) würde ein Fenster, das erst nach der Serveranfrage
+    // geöffnet wird, als Pop-up blockiert. Dort öffnet die Person die
+    // Anmeldeseite deshalb selbst über den Knopf im Dialog.
+    if (!kIsWeb && !await launchUrl(loginUri, mode: LaunchMode.externalApplication)) {
       setState(() {
         _isLoading = false;
         _errorMessage = 'Web-Browser konnte nicht automatisch geöffnet werden.';
@@ -214,10 +218,20 @@ class _LoginScreenState extends State<LoginScreen> {
               const CircularProgressIndicator(color: AppTheme.primaryLight),
               const SizedBox(height: 20),
               const Text(
-                'Dein Web-Browser wurde geöffnet.\n\nMelde dich wie gewohnt an und tippe anschließend auf "Zugriff gewähren".',
+                kIsWeb
+                    ? 'Öffne die Anmeldeseite deiner Nextcloud, melde dich wie gewohnt an und tippe auf "Zugriff gewähren".\n\nKomm danach hierher zurück – die App meldet sich von selbst an.'
+                    : 'Dein Web-Browser wurde geöffnet.\n\nMelde dich wie gewohnt an und tippe anschließend auf "Zugriff gewähren".',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary, height: 1.4),
               ),
+              if (kIsWeb) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => launchUrl(loginUri, webOnlyWindowName: '_blank'),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Anmeldeseite öffnen'),
+                ),
+              ],
               const SizedBox(height: 12),
               Text(
                 'Server: $serverUrl',
