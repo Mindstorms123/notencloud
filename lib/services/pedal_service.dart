@@ -37,10 +37,42 @@ class PedalService {
     try {
       final List<dynamic>? raw = await _channel.invokeMethod('getConnectedInputDevices');
       if (raw == null) return [];
-      return raw.map((e) => ConnectedDevice.fromMap(e as Map<dynamic, dynamic>)).toList();
+      return raw
+          .map((e) => ConnectedDevice.fromMap(e as Map<dynamic, dynamic>))
+          .where(isExternalPedalCandidate)
+          .toList();
     } catch (_) {
       return [];
     }
+  }
+
+  /// Namensteile eingebauter Eingabegeräte des Handys (Tasten, Fingerabdruck,
+  /// Touchscreen, virtuelle Tastatur). Die meldet Android ebenfalls als
+  /// „Tastatur“, ein Pedal sind sie nie.
+  static const _internalNameParts = [
+    'virtual',
+    'gpio',
+    'goodix',
+    'fingerprint',
+    'touchscreen',
+    'touch_screen',
+    'pwrkey',
+    'uinput',
+    'qpnp',
+    'headset',
+    'hall',
+    'sensor',
+    'haptic',
+    'vibrator',
+  ];
+
+  /// Ob ein von Android gemeldetes Eingabegerät ein angeschlossenes Pedal sein
+  /// kann: extern (Bluetooth/USB) und kein eingebautes Bauteil des Handys.
+  static bool isExternalPedalCandidate(ConnectedDevice device) {
+    if (!device.isExternal) return false;
+    final name = device.name.toLowerCase();
+    if (RegExp(r'(^|[_\-\s])ts\d*$').hasMatch(name)) return false; // z. B. goodix_ts0
+    return !_internalNameParts.any(name.contains);
   }
 
   /// Opens the system Bluetooth settings so the user can easily pair a new pedal
