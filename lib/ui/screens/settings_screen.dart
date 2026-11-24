@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -306,7 +307,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final loginUri = Uri.parse(flow.loginUrl);
-    if (!await launchUrl(loginUri, mode: LaunchMode.externalApplication)) {
+    // Web-App: Ein Fenster, das erst nach der Serveranfrage aufgeht, würde als
+    // Pop-up blockiert. Dort öffnet die Person die Anmeldeseite per Knopf im Dialog.
+    if (!kIsWeb && !await launchUrl(loginUri, mode: LaunchMode.externalApplication)) {
       setState(() {
         _isTestingConnection = false;
         _isConnectionSuccess = false;
@@ -331,16 +334,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text('Im Browser anmelden', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ],
           ),
-          content: const Column(
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: AppTheme.primaryLight),
-              SizedBox(height: 18),
-              Text(
-                'Dein Web-Browser wurde geöffnet.\n\nBitte melde dich wie gewohnt an und tippe auf "Zugriff gewähren".',
+              const CircularProgressIndicator(color: AppTheme.primaryLight),
+              const SizedBox(height: 18),
+              const Text(
+                kIsWeb
+                    ? 'Öffne die Anmeldeseite deiner Nextcloud, melde dich wie gewohnt an und tippe auf "Zugriff gewähren".\n\nKomm danach hierher zurück – die App meldet sich von selbst an.'
+                    : 'Dein Web-Browser wurde geöffnet.\n\nBitte melde dich wie gewohnt an und tippe auf "Zugriff gewähren".',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
               ),
+              if (kIsWeb) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () => launchUrl(loginUri, webOnlyWindowName: '_blank'),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Anmeldeseite öffnen'),
+                ),
+              ],
             ],
           ),
           actions: [
