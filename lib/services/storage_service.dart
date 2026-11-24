@@ -358,9 +358,55 @@ class StorageService {
     try {
       final list = jsonDecode(jsonStr) as List<dynamic>;
       final songs = list.map((e) => Song.fromJson(e as Map<String, dynamic>)).toList();
-      return songs.map((song) {
+      return normalizeSongs(songs);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static const _prefLegacyPartIdsKey = 'legacy_part_ids';
+  Map<String, List<String>>? _legacyPartIds;
+
+  Map<String, List<String>> _loadLegacyPartIds() {
+    if (_legacyPartIds != null) return _legacyPartIds!;
+    final result = <String, List<String>>{};
+    try {
+      final raw = _prefs.getString(_prefLegacyPartIdsKey);
+      if (raw != null) {
+        (jsonDecode(raw) as Map<String, dynamic>).forEach((key, value) {
+          result[key] = (value as List<dynamic>).cast<String>();
+        });
+      }
+    } catch (_) {}
+    return _legacyPartIds = result;
+  }
+
+  /// Frühere Kennung einer Stimme als (songId, partId), falls sie umbenannt
+  /// wurde. Notizen, die noch unter der alten Kennung liegen, findet man so wieder.
+  ({String songId, String partId})? getLegacyPartId(String partId) {
+    final entry = _loadLegacyPartIds()[partId];
+    if (entry == null || entry.length != 2) return null;
+    return (songId: entry[0], partId: entry[1]);
+  }
+
+  /// Bringt Instrument-Erkennung und Kennungen der Stimmen auf den aktuellen
+  /// Stand.
+  ///
+  /// Die Kennung einer Stimme muss auf jedem Gerät gleich sein: Nach ihr heißt
+  /// die Notizdatei in der Nextcloud. Geräte mit einem älteren Notenverzeichnis
+  /// führten Stimmen noch unter der Kennung, die beim ersten Einlesen galt, und
+  /// fanden deshalb die Notizen anderer Geräte nicht.
+  List<Song> normalizeSongs(List<Song> songs) {
+    final legacy = _loadLegacyPartIds();
+    var legacyChanged = false;
+    try {
+      final result = songs.map((song) {
         final sanitizedParts = song.parts.map((p) {
-          final reparsed = VoiceMatcher.parsePartFileName(p.fileName, p.songId, p.remotePath);
+          final reparsed = VoiceMatcher.parsePartFileName(p.fileName, song.id, p.remotePath);
+          if (p.id != reparsed.id && !legacy.containsKey(reparsed.id)) {
+            legacy[reparsed.id] = [p.songId, p.id];
+            legacyChanged = true;
+          }
           var inst = reparsed.detectedInstrument.trim();
           if (inst == 'Schlagzeug' || inst == 'Pauken' || inst == 'Glockenspiel') {
             inst = 'Percussion';
@@ -374,6 +420,8 @@ class StorageService {
               : 'Zusatzstimme';
 
           return p.copyWith(
+            id: reparsed.id,
+            songId: song.id,
             detectedInstrument: validInst,
             detectedVoice: reparsed.detectedVoice,
             detectedKey: reparsed.detectedKey,
@@ -382,8 +430,12 @@ class StorageService {
         }).toList();
         return song.copyWith(parts: sanitizedParts);
       }).toList();
+      if (legacyChanged) {
+        _prefs.setString(_prefLegacyPartIdsKey, jsonEncode(legacy)).catchError((_) => false);
+      }
+      return result;
     } catch (_) {
-      return [];
+      return songs;
     }
   }
 

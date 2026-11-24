@@ -781,6 +781,9 @@ class NextcloudService {
     return true;
   }
 
+  /// Warum der letzte Upload einer Notiz fehlgeschlagen ist (sonst null).
+  String? lastAnnotationUploadError;
+
   String _getUserAnnotationsDir(String songId) {
     final safeUser = account.username.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final safeSongId = songId.replaceAll(RegExp(r'[^\w\s-]'), '_');
@@ -791,8 +794,12 @@ class NextcloudService {
   Future<bool> uploadPageAnnotations(String songId, String partId, PageAnnotations annotations) async {
     final safePartId = partId.replaceAll(RegExp(r'[^\w\s-]'), '_');
     final userDir = _getUserAnnotationsDir(songId);
+    lastAnnotationUploadError = null;
     final ok = await ensureDirectoryExists(userDir);
-    if (!ok) return false;
+    if (!ok) {
+      lastAnnotationUploadError = 'Der Ordner „$userDir“ ließ sich in der Nextcloud nicht anlegen (fehlt das Schreibrecht?).';
+      return false;
+    }
 
     final remoteFilePath = '$userDir/${safePartId}_p${annotations.pageIndex}.json';
     final url = resolveUrl(Uri.parse('${account.webDavBaseUrl}$remoteFilePath'));
@@ -807,8 +814,13 @@ class NextcloudService {
         },
         body: utf8.encode(content),
       );
-      return res.statusCode == 201 || res.statusCode == 204;
-    } catch (_) {
+      final saved = res.statusCode == 201 || res.statusCode == 204;
+      if (!saved) {
+        lastAnnotationUploadError = 'Die Nextcloud hat das Speichern abgelehnt (Status ${res.statusCode}).';
+      }
+      return saved;
+    } catch (e) {
+      lastAnnotationUploadError = 'Keine Verbindung zur Nextcloud ($e).';
       return false;
     }
   }

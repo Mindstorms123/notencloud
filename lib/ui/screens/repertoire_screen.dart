@@ -293,12 +293,14 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
         },
       );
       await widget.storageService.saveCachedSongs(remoteSongs);
+      // Kennungen der Stimmen sofort angleichen, nicht erst beim nächsten Start.
+      final normalizedSongs = widget.storageService.normalizeSongs(remoteSongs);
 
       final diffCount = remoteSongs.length - initialCount;
 
       if (mounted) {
         setState(() {
-          _allSongs = remoteSongs;
+          _allSongs = normalizedSongs;
           _onSearchChanged();
           _isSyncing = false;
           _isBackgroundSyncing = false;

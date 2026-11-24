@@ -79,6 +79,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
   bool _isFitWidth = true;
   bool _isCloudSyncing = false;
   bool _isCloudSynced = false;
+  bool _uploadErrorShown = false;
 
   // Bluetooth Foot Pedal (Page Turner) state
   late PedalSettings _pedalSettings;
@@ -524,6 +525,19 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
         _isCloudSyncing = false;
         if (ok) _isCloudSynced = true;
       });
+      // Fehlgeschlagener Upload: einmal je geöffnetem Stück sagen, statt
+      // stillschweigend nur auf diesem Gerät zu speichern.
+      final reason = widget.nextcloudService?.lastAnnotationUploadError;
+      if (!ok && reason != null && !_uploadErrorShown) {
+        _uploadErrorShown = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.amber,
+            duration: const Duration(seconds: 6),
+            content: Text('Notiz ist nur auf diesem Gerät gespeichert. $reason'),
+          ),
+        );
+      }
     }
   }
 

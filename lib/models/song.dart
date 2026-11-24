@@ -29,6 +29,8 @@ class PartFile {
   });
 
   PartFile copyWith({
+    String? id,
+    String? songId,
     String? localFilePath,
     bool? isDownloaded,
     String? detectedInstrument,
@@ -39,8 +41,8 @@ class PartFile {
     DateTime? lastModified,
   }) {
     return PartFile(
-      id: id,
-      songId: songId,
+      id: id ?? this.id,
+      songId: songId ?? this.songId,
       fileName: fileName,
       remotePath: remotePath,
       localFilePath: localFilePath ?? this.localFilePath,

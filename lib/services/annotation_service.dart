@@ -31,29 +31,21 @@ class AnnotationService {
     int pageIndex, {
     NextcloudService? nextcloudService,
   }) async {
-    PageAnnotations? local;
-    if (isWeb) {
-      try {
-        final jsonStr = storageService.getWebAnnotation(songId, partId, pageIndex);
-        if (jsonStr != null) {
-          final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-          local = PageAnnotations.fromJson(map);
-        }
-      } catch (_) {}
-    } else {
-      try {
-        final path = await _getAnnotationFilePath(songId, partId, pageIndex);
-        final file = File(path);
-        if (await file.exists()) {
-          final jsonStr = await file.readAsString();
-          final map = jsonDecode(jsonStr) as Map<String, dynamic>;
-          local = PageAnnotations.fromJson(map);
-        }
-      } catch (_) {}
-    }
-
+    final local = await _readLocal(songId, partId, pageIndex);
     if (local != null) {
       return local;
+    }
+
+    // Die Stimme hatte auf diesem Gerät früher eine andere Kennung: Notizen von
+    // damals unter der neuen Kennung weiterführen. Bewusst ohne Upload – eine
+    // neuere Notiz eines anderen Geräts in der Nextcloud soll gewinnen.
+    final legacy = storageService.getLegacyPartId(partId);
+    if (legacy != null) {
+      final old = await _readLocal(legacy.songId, legacy.partId, pageIndex);
+      if (old != null) {
+        await saveAnnotations(songId, partId, old);
+        return old;
+      }
     }
 
     // If local was missing, try fetching from Nextcloud
@@ -64,10 +56,32 @@ class AnnotationService {
           await saveAnnotations(songId, partId, cloudAnn);
           return cloudAnn;
         }
+        if (legacy != null) {
+          final oldCloud = await nextcloudService.downloadPageAnnotations(legacy.songId, legacy.partId, pageIndex);
+          if (oldCloud != null) {
+            await saveAnnotations(songId, partId, oldCloud);
+            return oldCloud;
+          }
+        }
       } catch (_) {}
     }
 
     return PageAnnotations(pageIndex: pageIndex);
+  }
+
+  Future<PageAnnotations?> _readLocal(String songId, String partId, int pageIndex) async {
+    try {
+      if (isWeb) {
+        final jsonStr = storageService.getWebAnnotation(songId, partId, pageIndex);
+        if (jsonStr == null) return null;
+        return PageAnnotations.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+      }
+      final file = File(await _getAnnotationFilePath(songId, partId, pageIndex));
+      if (!await file.exists()) return null;
+      return PageAnnotations.fromJson(jsonDecode(await file.readAsString()) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Save annotations for a specific song part and page.
