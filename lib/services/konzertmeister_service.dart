@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../models/konzertmeister_appointment.dart';
+import 'nextcloud_service.dart';
 import 'storage_service.dart';
 
 class KonzertmeisterService {
@@ -28,7 +29,9 @@ class KonzertmeisterService {
     final url = storageService.getKonzertmeisterUrl();
 
     try {
-      final response = await client.get(Uri.parse(url)).timeout(timeout);
+      // In der Web-App über den CORS-Proxy, da Konzertmeister fremde Seiten
+      // im Browser nicht zulässt.
+      final response = await client.get(NextcloudService.resolveUrl(Uri.parse(url))).timeout(timeout);
       if (response.statusCode == 200) {
         final appointments = parseHtml(response.body);
         if (appointments.isNotEmpty || response.body.contains('km-appointment-list')) {
