@@ -28,13 +28,22 @@ class NextcloudService {
 
   static bool forceProxyForTesting = false;
 
+  /// Address of the CORS proxy used by the web build. Defaults to the
+  /// proxy.php next to the app (shared webhosting). Static hosts without PHP
+  /// (GitHub Pages) set an absolute address at build time:
+  /// `--dart-define=NOTENCLOUD_PROXY_URL=https://example.org/proxy.php`
+  static const String proxyUrl = String.fromEnvironment(
+    'NOTENCLOUD_PROXY_URL',
+    defaultValue: 'proxy.php',
+  );
+
   /// Resolves the URL for WebDAV requests.
-  /// When running in browser (Web PWA), routes requests through local proxy.php
+  /// When running in browser (Web PWA), routes requests through the CORS proxy
   /// to bypass Hetzner Storage Share CORS restrictions.
   static Uri resolveUrl(Uri uri) {
     if (kIsWeb || forceProxyForTesting) {
       final target = uri.toString();
-      return Uri.parse('proxy.php?url=${Uri.encodeComponent(target)}');
+      return Uri.parse('$proxyUrl?url=${Uri.encodeComponent(target)}');
     }
     return uri;
   }
