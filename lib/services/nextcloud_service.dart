@@ -778,12 +778,15 @@ class NextcloudService {
           if (mkcolRes.statusCode != 201 && mkcolRes.statusCode != 405) {
             // Ein paralleler Vorgang kann den Ordner gerade angelegt haben
             // (Nextcloud antwortet dann z. B. mit „gesperrt“): noch einmal nachsehen.
-            if (await probe(url) != 207) return false;
+            final again = await probe(url);
+            if (again < 200 || again >= 300) return false;
           }
-        } else if (status != 207) {
-          return false;
+          _knownDirs.add(currentPath);
+        } else if (status >= 200 && status < 300) {
+          // Vorhanden. Andere Antworten (z. B. vorübergehende Fehler) gelten wie
+          // bisher nicht als Abbruchgrund, werden aber auch nicht gemerkt.
+          _knownDirs.add(currentPath);
         }
-        _knownDirs.add(currentPath);
       } catch (_) {
         return false;
       }
