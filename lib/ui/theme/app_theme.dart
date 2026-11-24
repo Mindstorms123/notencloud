@@ -93,7 +93,7 @@ class AppTheme {
         selectedColor: primary.withValues(alpha: 0.2),
         side: const BorderSide(color: darkBorder),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(color: darkTextPrimary, fontSize: 12, fontWeight: FontWeight.w500),
       ),
       dividerTheme: const DividerThemeData(
         color: darkBorder,
@@ -184,7 +184,7 @@ class AppTheme {
         selectedColor: primary.withValues(alpha: 0.12),
         side: const BorderSide(color: lightBorder),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        labelStyle: const TextStyle(color: lightTextPrimary, fontSize: 12, fontWeight: FontWeight.w500),
       ),
       dividerTheme: const DividerThemeData(
         color: lightBorder,

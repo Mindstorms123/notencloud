@@ -824,7 +824,9 @@ class _RepertoireScreenState extends State<RepertoireScreen> {
                       labelStyle: TextStyle(
                         fontSize: 12,
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                        color: isSelected ? Colors.white : null,
+                        color: isSelected
+                            ? Colors.white
+                            : (isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary),
                       ),
                       onSelected: (selected) {
                         if (selected) {
