@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdfrx/pdfrx.dart' as pdfrx;
 import 'package:share_plus/share_plus.dart' show XFile;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/musician_profile.dart';
@@ -478,6 +479,26 @@ class SetlistPdfService {
       format: PdfStringFormat(lineAlignment: PdfVerticalAlignment.bottom),
     );
 
+    final safeTitle = setlist.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final safeVoice = aushilfeProfile.displayName.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final fileName = 'Notenheft_${safeTitle}_$safeVoice.pdf';
+
+    if (kIsWeb) {
+      // Web-App: Seiten direkt zusammensetzen statt jede Seite neu zu zeichnen
+      // und zu komprimieren. Der Weg unten friert den Browser bei gestochenen
+      // Noten für eine halbe Minute und länger ein.
+      onProgress?.call(playableCount, playableCount, 'Füge Noten zusammen...');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final coverBytes = Uint8List.fromList(await mergedDoc.save());
+      mergedDoc.dispose();
+      final merged = await _mergePdfs([
+        coverBytes,
+        for (final info in collected)
+          if (!info.item.isIntermission && info.pdfBytes != null) info.pdfBytes!,
+      ]);
+      return GeneratedPdf(fileName, merged);
+    }
+
     // 3. Second Pass: append each sheet music piece PDF into mergedDoc
     int currentPieceNum = 0;
     for (final info in collected) {
@@ -507,9 +528,31 @@ class SetlistPdfService {
     final bytes = await mergedDoc.save();
     mergedDoc.dispose();
 
-    final safeTitle = setlist.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
-    final safeVoice = aushilfeProfile.displayName.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
-    return GeneratedPdf('Notenheft_${safeTitle}_$safeVoice.pdf', Uint8List.fromList(bytes));
+    return GeneratedPdf(fileName, Uint8List.fromList(bytes));
+  }
+
+  /// Hängt fertige PDFs unverändert aneinander (PDFium), ohne ihre Inhalte
+  /// neu zu kodieren.
+  static Future<Uint8List> _mergePdfs(List<Uint8List> documents) async {
+    await pdfrx.pdfrxFlutterInitialize();
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final sources = <pdfrx.PdfDocument>[];
+    final output = await pdfrx.PdfDocument.createNew(sourceName: 'notenheft-$stamp');
+    try {
+      final pages = <pdfrx.PdfPage>[];
+      for (var i = 0; i < documents.length; i++) {
+        final doc = await pdfrx.PdfDocument.openData(documents[i], sourceName: 'notenheft-$stamp-teil-$i');
+        sources.add(doc);
+        pages.addAll(doc.pages);
+      }
+      output.pages = pages;
+      return await output.encodePdf();
+    } finally {
+      for (final doc in sources) {
+        await doc.dispose();
+      }
+      await output.dispose();
+    }
   }
 }
 
