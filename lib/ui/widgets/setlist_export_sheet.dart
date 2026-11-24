@@ -104,6 +104,16 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
 
   Future<void> _shareAushilfeBooklet() async {
     setState(() => _isGeneratingAushilfe = true);
+    // Das Blatt wird gleich geschlossen und damit abgebaut. Alles Weitere läuft
+    // deshalb über den Haupt-Navigator und nicht über dieses Blatt: Mit der
+    // früheren Prüfung auf `mounted` blieb das Fortschrittsfenster für immer
+    // stehen und das fertige Heft wurde nie angezeigt.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final hostContext = rootNavigator.context;
+    final setlist = widget.setlist;
+    final storageService = widget.storageService;
+    final nextcloudService = widget.nextcloudService;
+    final aushilfeProfile = _aushilfeProfile;
     Navigator.pop(context); // Close sheet to show full-screen progress dialog
 
     int currentPiece = 0;
@@ -112,7 +122,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
     StateSetter? dialogState;
 
     showDialog(
-      context: context,
+      context: hostContext,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
@@ -146,7 +156,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Stimme: ${_aushilfeProfile.displayName}',
+                  'Stimme: ${aushilfeProfile.displayName}',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.emerald, fontSize: 13),
                 ),
                 const SizedBox(height: 14),
@@ -175,10 +185,10 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
 
     try {
       final pdf = await SetlistPdfService.buildAushilfeBookletPdf(
-        setlist: widget.setlist,
-        aushilfeProfile: _aushilfeProfile,
-        storageService: widget.storageService,
-        nextcloudService: widget.nextcloudService,
+        setlist: setlist,
+        aushilfeProfile: aushilfeProfile,
+        storageService: storageService,
+        nextcloudService: nextcloudService,
         onProgress: (current, total, status) {
           currentPiece = current;
           totalPieces = total;
@@ -191,12 +201,12 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
       dialogState?.call(() {});
       final shareFile = await SetlistPdfService.toShareFile(pdf);
 
-      if (mounted) {
-        Navigator.pop(context); // Close progress dialog
+      if (hostContext.mounted) {
+        rootNavigator.pop(); // Close progress dialog
 
         // Show completed dialog with Share & Open options
         showDialog(
-          context: context,
+          context: hostContext,
           builder: (ctx) => AlertDialog(
             backgroundColor: AppTheme.darkCard,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -212,7 +222,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Das Notenheft für "${_aushilfeProfile.displayName}" wurde erfolgreich mit allen Stücken als zusammenhängendes PDF erstellt.',
+                  'Das Notenheft für "${aushilfeProfile.displayName}" wurde erfolgreich mit allen Stücken als zusammenhängendes PDF erstellt.',
                   style: const TextStyle(fontSize: 13, color: AppTheme.darkTextSecondary),
                 ),
                 const SizedBox(height: 10),
@@ -265,7 +275,7 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
                   SharePlus.instance.share(
                     ShareParams(
                       files: [shareFile],
-                      text: 'Notenheft für ${_aushilfeProfile.displayName} • ${widget.setlist.title}',
+                      text: 'Notenheft für ${aushilfeProfile.displayName} • ${setlist.title}',
                     ),
                   );
                 },
@@ -275,12 +285,12 @@ class _SetlistExportSheetState extends State<SetlistExportSheet> {
         );
       }
     } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // Close progress dialog
+      if (hostContext.mounted) {
+        rootNavigator.pop(); // Close progress dialog
         // Als eigenes Fenster: Eine Leiste am unteren Rand läge hinter diesem Blatt.
         final failedStep = statusText;
         showDialog(
-          context: context,
+          context: hostContext,
           builder: (ctx) => AlertDialog(
             backgroundColor: AppTheme.darkCard,
             title: const Text('Notenheft konnte nicht erstellt werden'),
