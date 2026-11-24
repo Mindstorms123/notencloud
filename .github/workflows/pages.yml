@@ -41,6 +41,13 @@ jobs:
           fi
           flutter build web --release "${args[@]}"
           rm -f build/web/proxy.php build/web/unzip.php build/web/.htaccess
+          # Pages lässt Browser Dateien 10 Minuten zwischenspeichern. Damit eine
+          # neue Fassung sofort ankommt, tragen die App-Dateien die Commit-Kennung.
+          v="${GITHUB_SHA::8}"
+          sed -i "s|\"mainJsPath\":\"main.dart.js\"|\"mainJsPath\":\"main.dart.js?v=$v\"|" build/web/flutter_bootstrap.js
+          sed -i "s|flutter_bootstrap.js\"|flutter_bootstrap.js?v=$v\"|" build/web/index.html
+          grep -q "main.dart.js?v=$v" build/web/flutter_bootstrap.js
+          grep -q "flutter_bootstrap.js?v=$v" build/web/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
