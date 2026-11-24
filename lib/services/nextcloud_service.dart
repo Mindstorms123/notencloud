@@ -756,6 +756,7 @@ class NextcloudService {
     final segments = clean.split('/');
     var currentPath = '';
 
+    _lastDirCheckOffline = false;
     Future<int> probe(Uri url) async {
       final req = http.Request('PROPFIND', url)
         ..headers.addAll(_headers)
@@ -788,17 +789,25 @@ class NextcloudService {
           _knownDirs.add(currentPath);
         }
       } catch (_) {
+        _lastDirCheckOffline = true;
         return false;
       }
     }
     return true;
   }
 
+  /// Ob [ensureDirectoryExists] zuletzt an fehlender Verbindung scheiterte.
+  bool _lastDirCheckOffline = false;
+
   /// Ordner, deren Existenz in dieser Sitzung schon bestätigt wurde.
   final Set<String> _knownDirs = {};
 
   /// Warum der letzte Upload einer Notiz fehlgeschlagen ist (sonst null).
   String? lastAnnotationUploadError;
+
+  /// Ob der letzte Upload an fehlender Verbindung scheiterte (und nicht an
+  /// einer Ablehnung durch die Nextcloud).
+  bool lastAnnotationUploadOffline = false;
 
   /// Mögliche Ablageorte der Notizen eines Stücks, in dieser Reihenfolge:
   ///   1. im Notenordner des Vereins (`<Notenordner>/_Notizen/<user>/<stück>`)
@@ -860,6 +869,7 @@ class NextcloudService {
     final fileName = _annotationFileName(partId, annotations.pageIndex);
     final body = utf8.encode(jsonEncode(annotations.toJson()));
     lastAnnotationUploadError = null;
+    lastAnnotationUploadOffline = false;
 
     final order = <int>[
       if (_writableAnnotationDir != null && _writableAnnotationDir! < dirs.length) _writableAnnotationDir!,
@@ -871,6 +881,11 @@ class NextcloudService {
     for (final index in order) {
       final dir = dirs[index];
       if (!await ensureDirectoryExists(dir)) {
+        if (_lastDirCheckOffline) {
+          error = 'Keine Verbindung zur Nextcloud.';
+          lastAnnotationUploadOffline = true;
+          break; // ohne Netz hilft auch der andere Ablageort nicht
+        }
         error = 'Der Ordner „$dir“ ließ sich in der Nextcloud nicht anlegen (fehlt das Schreibrecht?).';
         continue;
       }
@@ -890,6 +905,7 @@ class NextcloudService {
         error = 'Die Nextcloud hat das Speichern in „$dir“ abgelehnt (Status ${res.statusCode}).';
       } catch (e) {
         error = 'Keine Verbindung zur Nextcloud ($e).';
+        lastAnnotationUploadOffline = true;
       }
     }
     lastAnnotationUploadError = error;

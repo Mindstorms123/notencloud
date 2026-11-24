@@ -364,6 +364,34 @@ class StorageService {
     }
   }
 
+  static const _prefPendingAnnotationsKey = 'pending_annotation_uploads';
+  static const _pendingSeparator = '\u0001';
+
+  /// Notizseiten, die noch nicht in die Nextcloud übertragen werden konnten
+  /// (z. B. bei der Probe ohne Internet), als (songId, partId, Seite).
+  List<({String songId, String partId, int pageIndex})> getPendingAnnotationUploads() {
+    final result = <({String songId, String partId, int pageIndex})>[];
+    for (final entry in _prefs.getStringList(_prefPendingAnnotationsKey) ?? const <String>[]) {
+      final parts = entry.split(_pendingSeparator);
+      final page = parts.length == 3 ? int.tryParse(parts[2]) : null;
+      if (page != null) result.add((songId: parts[0], partId: parts[1], pageIndex: page));
+    }
+    return result;
+  }
+
+  Future<void> setAnnotationUploadPending(String songId, String partId, int pageIndex, bool pending) async {
+    final key = [songId, partId, '$pageIndex'].join(_pendingSeparator);
+    final list = List<String>.of(_prefs.getStringList(_prefPendingAnnotationsKey) ?? const <String>[]);
+    final had = list.contains(key);
+    if (pending == had) return;
+    if (pending) {
+      list.add(key);
+    } else {
+      list.remove(key);
+    }
+    await _prefs.setStringList(_prefPendingAnnotationsKey, list);
+  }
+
   static const _prefPartRotationsKey = 'part_rotations';
 
   /// Um wie viele Vierteldrehungen (im Uhrzeigersinn) die Noten einer Stimme

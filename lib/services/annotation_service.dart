@@ -103,12 +103,57 @@ class AnnotationService {
       }
 
       if (nextcloudService != null && nextcloudService.account.isConfigured) {
-        return await nextcloudService.uploadPageAnnotations(songId, partId, annotations);
+        final uploaded = await nextcloudService.uploadPageAnnotations(songId, partId, annotations);
+        // Nicht übertragen (kein Internet): vormerken und später nachreichen.
+        await storageService.setAnnotationUploadPending(songId, partId, annotations.pageIndex, !uploaded);
+        return uploaded;
       }
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  bool _syncingPending = false;
+
+  /// Reicht vorgemerkte Notizen nach, sobald die Nextcloud wieder erreichbar
+  /// ist. Liefert die Zahl der übertragenen Seiten.
+  ///
+  /// Hat ein anderes Gerät inzwischen eine neuere Fassung der Seite
+  /// gespeichert, bleibt diese stehen und die lokale wird nicht hochgeladen.
+  Future<int> syncPendingUploads(NextcloudService nextcloudService) async {
+    if (_syncingPending || !nextcloudService.account.isConfigured) return 0;
+    _syncingPending = true;
+    var uploaded = 0;
+    try {
+      for (final item in storageService.getPendingAnnotationUploads()) {
+        final local = await _readLocal(item.songId, item.partId, item.pageIndex);
+        if (local == null) {
+          await storageService.setAnnotationUploadPending(item.songId, item.partId, item.pageIndex, false);
+          continue;
+        }
+        final cloud = await nextcloudService.downloadPageAnnotations(item.songId, item.partId, item.pageIndex);
+        // Nextcloud nicht erreichbar: später wieder versuchen, Rest überspringen.
+        if (nextcloudService.lastAnnotationDownloadFailed) break;
+        final localTime = local.updatedAt;
+        final cloudTime = cloud?.updatedAt;
+        if (cloudTime != null && (localTime == null || cloudTime.isAfter(localTime))) {
+          await storageService.setAnnotationUploadPending(item.songId, item.partId, item.pageIndex, false);
+          continue;
+        }
+        if (await nextcloudService.uploadPageAnnotations(item.songId, item.partId, local)) {
+          await storageService.setAnnotationUploadPending(item.songId, item.partId, item.pageIndex, false);
+          uploaded++;
+        } else {
+          break;
+        }
+      }
+    } catch (_) {
+      // beim nächsten Durchlauf erneut
+    } finally {
+      _syncingPending = false;
+    }
+    return uploaded;
   }
 
   /// Delete all annotations for a specific page locally and on Nextcloud
@@ -119,6 +164,7 @@ class AnnotationService {
     NextcloudService? nextcloudService,
   }) async {
     try {
+      await storageService.setAnnotationUploadPending(songId, partId, pageIndex, false);
       if (isWeb) {
         await storageService.deleteWebAnnotation(songId, partId, pageIndex);
       } else {

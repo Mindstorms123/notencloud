@@ -547,6 +547,19 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
           });
           return;
         }
+        // Die Fassung auf diesem Gerät ist neuer (z. B. offline bei der Probe
+        // geändert): in die Nextcloud nachreichen.
+        if (cloudAnn != null &&
+            mounted &&
+            ann.updatedAt != null &&
+            (cloudAnn.updatedAt == null || ann.updatedAt!.isAfter(cloudAnn.updatedAt!))) {
+          widget.annotationService
+              .saveAnnotations(_currentSong.id, _currentPart.id, ann, nextcloudService: widget.nextcloudService)
+              .then((ok) {
+            if (ok && mounted) setState(() => _isCloudSynced = true);
+          });
+          return;
+        }
         if (cloudAnn != null && mounted) {
           final localTime = ann.updatedAt;
           final cloudTime = cloudAnn.updatedAt;
@@ -588,11 +601,16 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
       final reason = widget.nextcloudService?.lastAnnotationUploadError;
       if (!ok && reason != null && !_uploadErrorShown) {
         _uploadErrorShown = true;
+        final offline = widget.nextcloudService?.lastAnnotationUploadOffline ?? false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppTheme.amber,
-            duration: const Duration(seconds: 6),
-            content: Text('Notiz ist nur auf diesem Gerät gespeichert. $reason'),
+            backgroundColor: offline ? AppTheme.primary : AppTheme.amber,
+            duration: Duration(seconds: offline ? 4 : 6),
+            content: Text(
+              offline
+                  ? 'Kein Internet: Notizen bleiben auf diesem Gerät und werden übertragen, sobald wieder eine Verbindung besteht.'
+                  : 'Notiz ist nur auf diesem Gerät gespeichert. $reason',
+            ),
           ),
         );
       }
