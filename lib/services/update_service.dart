@@ -203,6 +203,7 @@ class UpdateService {
     var received = 0;
     var total = 0;
     var attempts = 0;
+    var lastPercent = -1;
 
     try {
       await WakelockPlus.enable();
@@ -232,8 +233,14 @@ class UpdateService {
             await for (final chunk in response.stream) {
               sink.add(chunk);
               received += chunk.length;
+              // Nur bei jedem vollen Prozent melden: Pro Sekunde kommen
+              // hunderte Datenpakete an, und jede Meldung baut Oberfläche neu auf.
               if (total > 0 && onProgress != null) {
-                onProgress((received / total).clamp(0.0, 1.0));
+                final percent = (received * 100) ~/ total;
+                if (percent != lastPercent) {
+                  lastPercent = percent;
+                  onProgress((percent / 100).clamp(0.0, 1.0));
+                }
               }
             }
           } finally {

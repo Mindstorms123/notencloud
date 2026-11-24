@@ -54,7 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _isCheckingUpdate = false;
   bool _isDownloadingUpdate = false;
-  double _downloadProgress = 0.0;
   AppUpdateInfo? _updateInfo;
   String? _updateError;
   String _installedVersion = '1.0.0';
@@ -595,21 +594,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final progress = UpdateService.downloadProgress.value;
     if (!mounted) return;
     final downloading = progress != null;
-    if (downloading == _isDownloadingUpdate && (progress ?? 0) == _downloadProgress) return;
+    // Die ganze Seite nur neu aufbauen, wenn der Download beginnt oder endet.
+    // Den laufenden Fortschritt zeichnet die Anzeige selbst (siehe unten) –
+    // sonst ruckelt das Scrollen während des Downloads.
+    if (downloading == _isDownloadingUpdate) return;
     // Nicht mitten im Bildaufbau: Der Listener kann aus initState heraus laufen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() {
-        _isDownloadingUpdate = downloading;
-        if (progress != null) _downloadProgress = progress;
-      });
+      setState(() => _isDownloadingUpdate = downloading);
     });
   }
 
   Future<void> _downloadAndInstall(String apkUrl) async {
     setState(() {
       _isDownloadingUpdate = true;
-      _downloadProgress = 0.0;
     });
 
     try {
@@ -1621,17 +1619,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                           const SizedBox(height: 12),
                           if (_isDownloadingUpdate) ...[
-                            LinearProgressIndicator(
-                              value: _downloadProgress > 0 ? _downloadProgress : null,
-                              backgroundColor: Colors.white10,
-                              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.emerald),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _downloadProgress > 0
-                                  ? 'Herunterladen: ${(_downloadProgress * 100).toInt()}%'
-                                  : 'Starte Download...',
-                              style: const TextStyle(fontSize: 11, color: AppTheme.emerald),
+                            ValueListenableBuilder<double?>(
+                              valueListenable: UpdateService.downloadProgress,
+                              builder: (context, value, _) {
+                                final progress = value ?? 0;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    LinearProgressIndicator(
+                                      value: progress > 0 ? progress : null,
+                                      backgroundColor: Colors.white10,
+                                      valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.emerald),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      progress > 0
+                                          ? 'Herunterladen: ${(progress * 100).round()}%'
+                                          : 'Starte Download...',
+                                      style: const TextStyle(fontSize: 11, color: AppTheme.emerald),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 4),
                             const Text(
