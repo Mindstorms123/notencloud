@@ -940,7 +940,7 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
               top: _isFullscreen ? 16 : 8,
               left: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(20),
@@ -950,10 +950,10 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_rounded, size: 14, color: Colors.white),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.arrow_back_ios_rounded, size: 20, color: Colors.white),
+                      // Volle Fingerfläche: Mit 14 px ohne Rand war der Knopf auf
+                      // dem Tablet kaum zu treffen.
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                       onPressed: _hasPrevInSetlist
                           ? () => _navigateToSetlistItem(_currentSetlistIndex - 1)
                           : null,
@@ -961,14 +961,14 @@ class _ScoreViewerScreenState extends State<ScoreViewerScreen> {
                     const SizedBox(width: 8),
                     Text(
                       '${_currentSetlistIndex + 1} / ${widget.currentSetlist!.items.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.white),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      icon: const Icon(Icons.arrow_forward_ios_rounded, size: 20, color: Colors.white),
+                      // Volle Fingerfläche: Mit 14 px ohne Rand war der Knopf auf
+                      // dem Tablet kaum zu treffen.
+                      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                       onPressed: _hasNextInSetlist
                           ? () => _navigateToSetlistItem(_currentSetlistIndex + 1)
                           : null,
