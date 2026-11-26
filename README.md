@@ -56,7 +56,8 @@ Storage Share) für die Noten und ein **einfaches Webhosting mit PHP** für die 
 
 1. In der Nextcloud die Ordner `Noten` und `_Setlisten` anlegen und für die Mitglieder freigeben.
 2. [`install.php`](https://github.com/Mindstorms123/notencloud/releases/latest/download/install.php)
-   auf das Webhosting laden und im Browser öffnen.
+   in einen **eigenen, leeren Ordner** (eigene Subdomain) auf dem Webhosting laden und im Browser öffnen –
+   nicht in den Ordner der Vereins-Webseite.
 3. Vereinsname und Nextcloud-Adresse eintragen – das Skript lädt die App und richtet sie ein.
 
 Updates laufen später über dieselbe Seite. Die ganze Anleitung mit Freigaben, Sicherheit

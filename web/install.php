@@ -2,7 +2,8 @@
 /**
  * Notencloud – Einrichtung und Updates auf einfachem Webhosting (PHP, kein SSH nötig)
  *
- * 1. Diese eine Datei in den Ordner der (Sub-)Domain hochladen.
+ * 1. Diese eine Datei in einen EIGENEN, LEEREN Ordner hochladen (eigene Subdomain
+ *    oder Unterordner) – nicht in den Ordner einer bestehenden Webseite.
  * 2. Im Browser aufrufen:  https://noten.euer-verein.de/install.php
  * 3. Formular ausfüllen – fertig.
  *
@@ -416,6 +417,23 @@ function nc_settings_from_post(): array
     ];
 }
 
+/**
+ * Dateien, die schon im Ordner liegen und nicht zu Notencloud gehören – etwa die
+ * Webseite des Vereins. Die Einrichtung würde gleichnamige Dateien überschreiben.
+ */
+function nc_foreign_files(): array
+{
+    $own = ['.', '..', basename(__FILE__), NC_ZIP_NAME];
+    $found = [];
+    foreach ((array) @scandir(__DIR__) as $name) {
+        if (in_array($name, $own, true) || strpos($name, '.notencloud-download-') === 0) {
+            continue;
+        }
+        $found[] = is_dir(__DIR__ . '/' . $name) ? $name . '/' : $name;
+    }
+    return $found;
+}
+
 function nc_requirements(): array
 {
     $checks = [];
@@ -439,6 +457,7 @@ if (empty($_SESSION['token'])) {
 }
 
 $state = nc_state();
+$foreign = $state === null ? nc_foreign_files() : [];
 $requirements = nc_requirements();
 $ready = !in_array(false, array_column($requirements, 1), true);
 $isPost = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
@@ -461,6 +480,9 @@ try {
         $password = (string) ($_POST['password'] ?? '');
         if (strlen($password) < 10) {
             throw new InvalidArgumentException('Das Passwort für spätere Updates braucht mindestens 10 Zeichen.');
+        }
+        if ($foreign !== [] && ($_POST['overwrite'] ?? '') !== 'ja') {
+            throw new InvalidArgumentException('In diesem Ordner liegen schon Dateien. Bitte unten bestätigen, dass hier eingerichtet werden darf – oder install.php in einen eigenen, leeren Ordner legen.');
         }
         $settings = nc_settings_from_post();
         $version = nc_install_app();
@@ -563,6 +585,8 @@ function nc_fields(array $form): void
   label em { font-weight: 400; color: var(--muted); font-style: normal; }
   input { display:block; width:100%; margin-top:6px; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: #0f1013; color: var(--text); font: inherit; }
   input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label.check { display:flex; gap:10px; align-items:flex-start; font-weight:400; }
+  label.check input { width:auto; margin-top:5px; flex:none; }
   small { display:block; font-weight:400; color: var(--muted); margin-top: 4px; }
   button, .button { display:inline-block; border:0; border-radius: 10px; padding: 12px 20px; background: var(--accent); color:#06202c; font: inherit; font-weight: 700; cursor: pointer; text-decoration:none; }
   button.plain { background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
@@ -600,6 +624,21 @@ function nc_fields(array $form): void
         <?php endforeach; ?>
       </ul>
     </section>
+    <section>
+      <h2>Wo wird eingerichtet?</h2>
+      <p>Die App wird in genau diesen Ordner entpackt und ist danach hier erreichbar:</p>
+      <span class="copy"><?= nc_h($appUrl) ?></span>
+      <?php if ($foreign === []): ?>
+        <p>Der Ordner ist leer – so soll es sein. Stimmt die Adresse nicht, <code>install.php</code> in den Ordner der gewünschten (Sub-)Domain verschieben.</p>
+      <?php else: ?>
+        <div class="msg error" role="alert">
+          <strong>Achtung: In diesem Ordner liegen schon Dateien.</strong>
+          Liegt hier eure Vereins-Webseite, würde sie überschrieben (unter anderem <code>index.html</code> und <code>.htaccess</code>).
+          Legt für Notencloud eine eigene Subdomain oder einen eigenen Unterordner an und ladet <code>install.php</code> dorthin.
+          <small>Gefunden: <?= nc_h(implode(', ', array_slice($foreign, 0, 8))) ?><?= count($foreign) > 8 ? ' und ' . (count($foreign) - 8) . ' weitere' : '' ?></small>
+        </div>
+      <?php endif; ?>
+    </section>
     <form method="post" autocomplete="off">
       <input type="hidden" name="token" value="<?= nc_h($token) ?>">
       <input type="hidden" name="action" value="install">
@@ -613,6 +652,10 @@ function nc_fields(array $form): void
           <input type="password" name="password" required minlength="10" autocomplete="new-password">
           <small>Mindestens 10 Zeichen. Damit ruft ihr diese Seite später wieder auf, um die App zu aktualisieren. Es ist <strong>nicht</strong> das Nextcloud-Passwort.</small>
         </label>
+        <?php if ($foreign !== []): ?>
+          <label class="check"><input type="checkbox" name="overwrite" value="ja">
+            <span>Ich habe geprüft: In diesem Ordner liegt keine Webseite, die erhalten bleiben muss. Vorhandene Dateien dürfen überschrieben werden.</span></label>
+        <?php endif; ?>
         <button type="submit" <?= $ready ? '' : 'disabled' ?>>Notencloud einrichten</button>
         <small>Lädt die App (etwa 17 MB) und richtet sie in diesem Ordner ein. Das dauert bis zu einer Minute.</small>
       </section>

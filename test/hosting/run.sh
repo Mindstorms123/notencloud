@@ -66,6 +66,16 @@ has "$out" "Konzertmeister-Link muss"
 out=$(curl -s -b "$jar" "$url" -d token=falsch -d action=install)
 has "$out" "zu lange offen"
 
+echo "2b. Ordner mit fremden Dateien: nur mit Bestätigung"
+echo "Vereinsseite" > "$site/index.html"
+page=$(curl -s -b "$jar" -c "$jar" "$url"); has "$page" "liegen schon Dateien"; has "$page" "index.html"
+out=$(post -d action=install --data-urlencode "club=MV Test" --data-urlencode "server=http://127.0.0.1:$NC_PORT" -d folder=Noten -d password=langesPasswort1)
+has "$out" "Bitte unten bestätigen"
+grep -q "Vereinsseite" "$site/index.html" || fail "Webseite ohne Bestätigung überschrieben"
+[ ! -e "$site/proxy.php" ] || fail "ohne Bestätigung installiert"
+rm "$site/index.html"
+page=$(curl -s -b "$jar" -c "$jar" "$url"); has "$page" "Der Ordner ist leer"
+
 echo "3. Einrichtung"
 out=$(post -d action=install --data-urlencode "club=MV Test & Söhne" \
   --data-urlencode "server=http://127.0.0.1:$NC_PORT/index.php/apps/files/" -d folder=Notenarchiv -d password=langesPasswort1 \
@@ -107,6 +117,14 @@ out=$(post -d action=settings --data-urlencode "club=Neuer Name" --data-urlencod
 has "$out" "Einstellungen sind gespeichert"
 grep -q '"club": "Neuer Name"' "$site/config.json" || fail "Name nicht gespeichert"
 php -r '$c = include $argv[1]; exit($c["hosts"] === ["127.0.0.1"] ? 0 : 1);' "$site/proxy.config.php" || fail "Konzertmeister noch freigegeben"
+
+echo "6b. Mit Bestätigung in einen belegten Ordner"
+site2="$work/site2"; mkdir -p "$site2"; cp "$root/web/install.php" "$site2/"; echo "alt" > "$site2/index.html"
+( cd "$site2" && NOTENCLOUD_RELEASE_BASE="http://127.0.0.1:$REL_PORT/" exec php -S "127.0.0.1:8798" >/dev/null 2>&1 ) & pids+=($!)
+for _ in $(seq 50); do curl -s -o /dev/null "http://127.0.0.1:8798/install.php" && break; sleep 0.1; done
+t2=$(curl -s -c "$work/jar2" "http://127.0.0.1:8798/install.php" | grep -o 'name="token" value="[^"]*"' | head -1 | cut -d'"' -f4)
+out=$(curl -s -b "$work/jar2" "http://127.0.0.1:8798/install.php" --data-urlencode "token=$t2" -d action=install -d overwrite=ja --data-urlencode "club=MV Zwei" --data-urlencode "server=http://127.0.0.1:$NC_PORT" -d folder=Noten -d password=langesPasswort1)
+has "$out" "Die App läuft"
 
 echo "7. Archiv neben install.php (ohne Download)"
 make_release v1.2.0; cp "$release/notencloud-web.zip" "$site/"; rm "$release/notencloud-web.zip"

@@ -73,18 +73,40 @@ Was wo landet:
 
 ## Schritt 2 – Webhosting vorbereiten
 
-1. Im Kundenmenü eine **Subdomain** anlegen, z. B. `noten.euer-verein.de`, mit eigenem
-   Ordner (z. B. `public_html/noten`). Ein Unterordner der Hauptseite geht auch
-   (`euer-verein.de/noten/`).
-2. Für die (Sub-)Domain das **SSL-Zertifikat** (Let’s Encrypt) einschalten.
-3. Eine aktuelle **PHP-Version** wählen (8.x).
+Notencloud braucht einen **eigenen, leeren Ordner** mit eigener Adresse. Das muss
+stehen, bevor `install.php` hochgeladen wird.
+
+> **Nicht in den Ordner der Vereins-Webseite installieren.** Die Einrichtung entpackt
+> die App in den Ordner, in dem `install.php` liegt, und würde dort unter anderem
+> `index.html` und `.htaccess` ersetzen. `install.php` warnt, wenn der Ordner nicht leer
+> ist, und richtet dann nur nach ausdrücklicher Bestätigung ein.
+
+1. Im Kundenmenü des Webhostings eine **Subdomain** anlegen, z. B. `noten.euer-verein.de`,
+   und ihr einen **eigenen Ordner** zuweisen (z. B. `public_html/noten`).
+   Wer keine Subdomain möchte, legt nur den Unterordner an – die App ist dann unter
+   `euer-verein.de/noten/` erreichbar.
+2. **Nameserver / DNS:**
+   - Liegt die Domain beim selben Anbieter wie das Webhosting (bei Hetzner zum
+     Webhosting gebucht), trägt das Kundenmenü die Subdomain selbst ein – nichts weiter
+     zu tun.
+   - Liegt die Domain woanders, dort einen DNS-Eintrag für `noten` anlegen, der auf das
+     Webhosting zeigt (die Zieladresse nennt das Kundenmenü des Webhostings).
+   - Bis die neue Adresse überall bekannt ist, kann es von ein paar Minuten bis zu
+     einigen Stunden dauern.
+3. Für die Subdomain das **SSL-Zertifikat** (Let’s Encrypt) einschalten. Das klappt
+   erst, wenn die Adresse erreichbar ist.
+4. Eine aktuelle **PHP-Version** wählen (8.x).
+5. Probe: `https://noten.euer-verein.de` im Browser öffnen. Es muss eine leere Seite,
+   eine Ordnerliste oder eine Platzhalterseite des Anbieters kommen – **nicht** eure
+   Vereins-Webseite und keine Zertifikatswarnung.
 
 ## Schritt 3 – App einrichten
 
 1. [`install.php`](https://github.com/Mindstorms123/notencloud/releases/latest/download/install.php)
    herunterladen.
-2. Per WebFTP (oder FTP) in den Ordner der Subdomain hochladen.
+2. Per WebFTP (oder FTP) in den **leeren Ordner der Subdomain** aus Schritt 2 hochladen.
 3. Im Browser öffnen: `https://noten.euer-verein.de/install.php`
+   Die Seite zeigt oben, unter welcher Adresse die App landen wird, und ob der Ordner leer ist.
 4. Formular ausfüllen:
    - **Name des Vereins** – steht auf Ablaufplänen und in Einladungen
    - **Adresse der Nextcloud** – z. B. `https://nx12345.your-storageshare.de`
@@ -162,6 +184,9 @@ die Noten liegen ohnehin in der Nextcloud).
 
 | Anzeige | Ursache und Abhilfe |
 |---|---|
+| „In diesem Ordner liegen schon Dateien“ | `install.php` liegt im Ordner einer bestehenden Webseite oder der Anbieter hat eine Platzhalterseite abgelegt. Im ersten Fall `install.php` in einen eigenen Ordner verschieben; im zweiten die Bestätigung ankreuzen. |
+| Die Subdomain zeigt die Vereins-Webseite | Der Subdomain ist kein eigener Ordner zugewiesen – im Kundenmenü nachholen (Schritt 2). |
+| Zertifikatswarnung im Browser | SSL für die Subdomain ist noch nicht aktiv oder die Adresse noch nicht überall bekannt – etwas warten, dann im Kundenmenü erneut einschalten. |
 | `install.php` zeigt Text statt einer Seite | PHP ist für die Domain nicht aktiv – im Kundenmenü einschalten. |
 | „Unter … antwortet keine Nextcloud“ | Adresse stimmt nicht. Nur den vorderen Teil eintragen, z. B. `https://nx12345.your-storageshare.de`. |
 | „Im neuesten Release liegt (noch) kein Web-Paket“ | Das Release wurde gerade erst veröffentlicht; das Paket hängt ein paar Minuten später daran. |
