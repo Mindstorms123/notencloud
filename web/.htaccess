@@ -29,18 +29,19 @@
     </IfModule>
 </FilesMatch>
 
-<FilesMatch "flutter_service_worker\.js">
-    <IfModule mod_headers.c>
-        Header unset ETag
-        Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
-        Header set Pragma "no-cache"
-    </IfModule>
-</FilesMatch>
-
 # - Statische Assets (JS, WASM, Fonts, Bilder) dürfen im Cache bleiben
 <FilesMatch "\.(js|wasm|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$">
     <IfModule mod_headers.c>
         Header set Cache-Control "max-age=2592000, public"
+    </IfModule>
+</FilesMatch>
+
+# - Der Service Worker selbst nie cachen (steht bewusst nach der allgemeinen JS-Regel)
+<FilesMatch "^(sw|flutter_service_worker)\.js$">
+    <IfModule mod_headers.c>
+        Header unset ETag
+        Header set Cache-Control "max-age=0, no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
     </IfModule>
 </FilesMatch>
 
@@ -51,3 +52,10 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.html [L]
 </IfModule>
+
+# 5. Einrichtungs-Daten nie ausliefern
+<FilesMatch "^(proxy\.config|install\.config)\.php$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>

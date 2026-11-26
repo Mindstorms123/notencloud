@@ -624,7 +624,8 @@ class StorageService {
   // --- Konzertmeister Kalender & Auftritte ---
 
   bool isKonzertmeisterEnabled() {
-    return _prefs.getBool(_prefKonzertmeisterEnabledKey) ?? true;
+    // Ohne hinterlegten Kalender-Link des Vereins bleibt der Kalender zunächst aus.
+    return _prefs.getBool(_prefKonzertmeisterEnabledKey) ?? KonzertmeisterService.defaultUrl.isNotEmpty;
   }
 
   Future<void> setKonzertmeisterEnabled(bool enabled) async {

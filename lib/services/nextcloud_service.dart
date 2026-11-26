@@ -7,6 +7,7 @@ import '../models/nextcloud_account.dart';
 import '../models/song.dart';
 import '../models/setlist.dart';
 import '../models/annotation.dart';
+import 'app_config.dart';
 import 'voice_matcher.dart';
 
 class NextcloudService {
@@ -29,13 +30,9 @@ class NextcloudService {
   static bool forceProxyForTesting = false;
 
   /// Address of the CORS proxy used by the web build. Defaults to the
-  /// proxy.php next to the app (shared webhosting). Static hosts without PHP
-  /// (GitHub Pages) set an absolute address at build time:
-  /// `--dart-define=NOTENCLOUD_PROXY_URL=https://example.org/proxy.php`
-  static const String proxyUrl = String.fromEnvironment(
-    'NOTENCLOUD_PROXY_URL',
-    defaultValue: 'proxy.php',
-  );
+  /// proxy.php next to the app (shared webhosting); `config.json` or
+  /// `--dart-define=NOTENCLOUD_PROXY_URL=…` can point elsewhere (see [AppConfig]).
+  static String get proxyUrl => AppConfig.proxyUrl;
 
   /// Kennung des Web-Builds (Commit), beim Bauen gesetzt: `--dart-define=NOTENCLOUD_BUILD=…`
   static const String webBuild = String.fromEnvironment('NOTENCLOUD_BUILD', defaultValue: 'lokal');

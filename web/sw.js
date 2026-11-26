@@ -98,6 +98,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Vereins-Einstellungen: möglichst frisch, damit Änderungen sofort ankommen;
+  // ohne Netz aus dem Speicher.
+  if (url.pathname.endsWith('/config.json')) {
+    event.respondWith((async () => {
+      try {
+        return await fromNetwork(request, 3000);
+      } catch (_) {
+        return (await fromCache(request)) || Response.error();
+      }
+    })());
+    return;
+  }
+
   // Übrige App-Dateien: aus dem Speicher, sonst aus dem Netz (und merken).
   event.respondWith((async () => {
     const cached = await fromCache(request);

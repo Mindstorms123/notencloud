@@ -12,7 +12,8 @@
 //        'origins' => ['https://beispiel.github.io'],      // Seiten, die den Proxy nutzen dürfen
 //    ];
 //    Ohne diese Datei leitet der Proxy an jeden Server weiter. Sobald der Proxy
-//    öffentlich erreichbar ist, sollte sie angelegt werden.
+//    öffentlich erreichbar ist, sollte sie angelegt werden – install.php
+//    erledigt das bei der Einrichtung.
 $config = [];
 $configFile = __DIR__ . '/proxy.config.php';
 if (is_file($configFile)) {
@@ -109,13 +110,18 @@ foreach ($incomingHeaders as $name => $value) {
     $forwardHeaders[] = "$name: $value";
 }
 
+// Lange Downloads (große Partituren) nicht vom PHP-Zeitlimit abbrechen lassen.
+@set_time_limit(600);
+
 curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $_SERVER['REQUEST_METHOD']);
 curl_setopt($ch, CURLOPT_HTTPHEADER, $forwardHeaders);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HEADER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+curl_setopt($ch, CURLOPT_TIMEOUT, 600);
+if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+    curl_setopt($ch, CURLOPT_NOBODY, true);
+}
 
 // Request-Body weiterreichen (z.B. XML bei PROPFIND oder Bytes bei PUT)
 if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD') {
@@ -125,9 +131,52 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'HEAD
     }
 }
 
-$response = curl_exec($ch);
+// 4. Antwort durchreichen, ohne sie im Arbeitsspeicher zu sammeln: Auf einfachem
+//    Webhosting ist der Speicher knapp, Noten-PDFs können aber groß sein.
+$responseHeaders = [];
+$started = false;
 
-if (curl_errno($ch)) {
+// Schickt Statuscode und die wichtigen Header der Nextcloud-Antwort an den Browser.
+$startResponse = function () use ($ch, &$responseHeaders, &$started) {
+    if ($started) {
+        return;
+    }
+    $started = true;
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code(curl_getinfo($ch, CURLINFO_HTTP_CODE) ?: 502);
+    foreach ($responseHeaders as $line) {
+        $lower = strtolower($line);
+        foreach (['content-type:', 'etag:', 'content-length:', 'dav:', 'content-range:', 'accept-ranges:', 'last-modified:'] as $wanted) {
+            if (strpos($lower, $wanted) === 0) {
+                header($line);
+                break;
+            }
+        }
+    }
+};
+
+curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $line) use (&$responseHeaders) {
+    $trimmed = trim($line);
+    if (stripos($trimmed, 'HTTP/') === 0) {
+        // Neue Statuszeile (z.B. nach "100 Continue"): Header von vorn sammeln.
+        $responseHeaders = [];
+    } elseif ($trimmed !== '') {
+        $responseHeaders[] = $trimmed;
+    }
+    return strlen($line);
+});
+curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($startResponse) {
+    $startResponse();
+    echo $chunk;
+    flush();
+    return strlen($chunk);
+});
+
+curl_exec($ch);
+
+if (curl_errno($ch) && !$started) {
     http_response_code(502);
     header("Content-Type: text/plain; charset=utf-8");
     echo "Proxy-Fehler: " . curl_error($ch);
@@ -135,25 +184,6 @@ if (curl_errno($ch)) {
     exit;
 }
 
-$headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+// Antworten ohne Inhalt (z.B. 201 nach PUT, 204 nach DELETE)
+$startResponse();
 curl_close($ch);
-
-$rawHeaders = substr($response, 0, $headerSize);
-$body = substr($response, $headerSize);
-
-http_response_code($httpCode);
-
-// Wichtige Header aus der Nextcloud-Antwort an den Browser weiterleiten
-$headerLines = explode("\r\n", $rawHeaders);
-foreach ($headerLines as $line) {
-    $lower = strtolower($line);
-    if (strpos($lower, 'content-type:') === 0 ||
-        strpos($lower, 'etag:') === 0 ||
-        strpos($lower, 'content-length:') === 0 ||
-        strpos($lower, 'dav:') === 0) {
-        header($line);
-    }
-}
-
-echo $body;

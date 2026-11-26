@@ -42,7 +42,7 @@ jobs:
           # --no-web-resources-cdn: Grafik-Engine aus dem eigenen Build statt von
           # Googles Servern, sonst startet die App ohne Internet nicht.
           flutter build web --release --no-web-resources-cdn "${args[@]}"
-          rm -f build/web/proxy.php build/web/unzip.php build/web/.htaccess
+          rm -f build/web/proxy.php build/web/install.php build/web/.htaccess
           # Versionskennung an den App-Dateien und Dateiliste für den Offline-Betrieb.
           scripts/web_postbuild.sh "${GITHUB_SHA::8}"
 

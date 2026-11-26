@@ -10,6 +10,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/musician_profile.dart';
 import '../models/setlist.dart';
 import '../models/song.dart';
+import 'app_config.dart';
 import 'nextcloud_service.dart';
 import 'storage_service.dart';
 import 'voice_matcher.dart';
@@ -83,7 +84,7 @@ class SetlistPdfService {
     );
 
     page.graphics.drawString(
-      'Ablaufplan & Programm • Blasorchester 1862',
+      'Ablaufplan & Programm • ${AppConfig.clubName}',
       metaFont,
       brush: PdfSolidBrush(PdfColor(224, 231, 255)),
       bounds: Rect.fromLTWH(14, 34, pageWidth - 28, 16),
@@ -484,7 +485,7 @@ class SetlistPdfService {
 
     // Footer
     coverPage.graphics.drawString(
-      'Notencloud • Blasorchester 1862 • Erstellt am ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}',
+      'Notencloud • ${AppConfig.clubName} • Erstellt am ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}',
       PdfStandardFont(PdfFontFamily.helvetica, 8),
       brush: PdfSolidBrush(PdfColor(148, 163, 184)),
       bounds: Rect.fromLTWH(0, pageHeight - 14, pageWidth, 14),

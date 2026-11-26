@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/song.dart';
+import '../../services/app_config.dart';
 import '../../services/digitization_service.dart';
 import '../../services/edition_lookup_service.dart';
 import '../../services/nextcloud_service.dart';
@@ -358,7 +359,7 @@ class _DigitizationAuditScreenState extends State<DigitizationAuditScreen> {
         await SharePlus.instance.share(
           ShareParams(
             files: [shareFile],
-            text: 'Fehlende Noten Digitalisierungs-Liste (Blasorchester 1862)',
+            text: 'Fehlende Noten Digitalisierungs-Liste (${AppConfig.clubName})',
           ),
         );
       }

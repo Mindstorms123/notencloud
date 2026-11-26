@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/nextcloud_account.dart';
+import '../../services/app_config.dart';
 import '../../services/konzertmeister_service.dart';
 import '../../services/nextcloud_service.dart';
 import '../../services/storage_service.dart';
@@ -25,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _serverUrlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _rootFolderController = TextEditingController(text: '/Noten');
+  final _rootFolderController = TextEditingController(text: AppConfig.rootFolder);
 
   bool _isLoading = false;
   bool _isManualTesting = false;
@@ -34,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _clipboardDetected = false;
   String? _errorMessage;
 
-  static const _defaultServerUrl = 'https://cloud.blasorchester-1862.de/';
+  static String get _defaultServerUrl => AppConfig.serverUrl;
 
   @override
   void initState() {
@@ -147,11 +148,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final serverUrl = rawUrl.isNotEmpty ? rawUrl : _defaultServerUrl;
     final folder = _rootFolderController.text.trim().isNotEmpty
         ? _rootFolderController.text.trim()
-        : '/Noten';
+        : AppConfig.rootFolder;
 
     final setupLink = 'notencloud://setup?server=${Uri.encodeQueryComponent(serverUrl)}&folder=${Uri.encodeQueryComponent(folder)}';
 
-    final shareText = '🎵 Blasorchester Notencloud Einrichtung:\n\n'
+    final shareText = '🎵 Notencloud Einrichtung (${AppConfig.clubName}):\n\n'
         'Tippe auf den Einrichtungs-Link, um Notencloud automatisch mit unserem Archiv zu verbinden:\n'
         '$setupLink\n\n'
         '(Alternativ: Server: $serverUrl | Notenordner: $folder)\n\n'
@@ -268,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         final folder = _rootFolderController.text.trim().isNotEmpty
             ? _rootFolderController.text.trim()
-            : '/Noten';
+            : AppConfig.rootFolder;
 
         final account = NextcloudAccount(
           serverUrl: creds.server.isNotEmpty ? creds.server : serverUrl,
@@ -313,7 +314,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
     final folder = _rootFolderController.text.trim().isNotEmpty
         ? _rootFolderController.text.trim()
-        : '/Noten';
+        : AppConfig.rootFolder;
 
     if (username.isEmpty || password.isEmpty) {
       setState(() {
@@ -491,7 +492,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: InputDecoration(
                     labelText: 'Konzertmeister Widget URL',
                     hintText: 'https://rest.konzertmeister.app/...',
-                    helperText: 'Standard: Blasorchester Georgsmarienhütte e. V.',
+                    helperText: 'Link aus Konzertmeister › Webseiten-Einbindung',
                     helperStyle: const TextStyle(fontSize: 11, color: AppTheme.darkTextMuted),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.refresh_rounded, size: 18),

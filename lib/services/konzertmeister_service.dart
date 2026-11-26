@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import '../models/konzertmeister_appointment.dart';
+import 'app_config.dart';
 import 'nextcloud_service.dart';
 import 'storage_service.dart';
 
 class KonzertmeisterService {
-  static const String defaultUrl =
-      'https://rest.konzertmeister.app/api/v3/org/OALS_97300be2-6785-4047-b6f7-69d78c27a97b/upcomingappointments?showDescription=false&onlyPublicsite=true&limit=5&display=light&lang=de&hash=178e1a86f7a4f47ac79d26cbf617077cbe8308753d35cd6496c0e6d9e88d4543';
+  /// Vorbelegter Kalender-Link des Vereins (leer = keiner hinterlegt).
+  static String get defaultUrl => AppConfig.konzertmeisterUrl;
 
   final StorageService storageService;
   final http.Client client;

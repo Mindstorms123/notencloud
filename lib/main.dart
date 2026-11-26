@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'services/app_config.dart';
 import 'services/storage_service.dart';
 import 'ui/screens/login_screen.dart';
 import 'ui/screens/main_navigation_screen.dart';
@@ -41,6 +42,9 @@ void main() async {
       systemNavigationBarColor: Colors.transparent,
     ),
   );
+
+  // Vereins-Einstellungen der Web-Fassung (config.json neben der App).
+  await AppConfig.load();
 
   final storageService = await StorageService.init();
   runApp(NotencloudApp(storageService: storageService));

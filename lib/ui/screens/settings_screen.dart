@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/musician_profile.dart';
 import '../../models/nextcloud_account.dart';
+import '../../services/app_config.dart';
 import '../../models/pedal_settings.dart';
 import '../../services/konzertmeister_service.dart';
 import '../../services/nextcloud_service.dart';
@@ -292,7 +293,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _startBrowserLoginFlow() async {
     final serverUrl = _serverUrlController.text.trim().isNotEmpty
         ? _serverUrlController.text.trim()
-        : 'https://cloud.blasorchester-1862.de/';
+        : AppConfig.serverUrl;
     _serverUrlController.text = serverUrl;
 
     setState(() {
@@ -388,7 +389,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _usernameController.text = creds.loginName;
           _passwordController.text = creds.appPassword;
           if (_rootFolderController.text.trim().isEmpty) {
-            _rootFolderController.text = '/Noten';
+            _rootFolderController.text = AppConfig.rootFolder;
           }
         });
         await _saveAccount();
@@ -468,14 +469,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _shareConnectionInfo() {
     final server = _serverUrlController.text.trim().isNotEmpty
         ? _serverUrlController.text.trim()
-        : 'https://cloud.blasorchester-1862.de/';
+        : AppConfig.serverUrl;
     final folder = _rootFolderController.text.trim().isNotEmpty
         ? _rootFolderController.text.trim()
-        : '/Noten';
+        : AppConfig.rootFolder;
 
     final setupLink = 'notencloud://setup?server=${Uri.encodeQueryComponent(server)}&folder=${Uri.encodeQueryComponent(folder)}';
 
-    final text = '🎵 Blasorchester Notencloud Einrichtung:\n\n'
+    final text = '🎵 Notencloud Einrichtung (${AppConfig.clubName}):\n\n'
         'Tippe auf den Einrichtungs-Link, um Notencloud automatisch mit unserem Archiv zu verbinden:\n'
         '$setupLink\n\n'
         '(Alternativ: Server: $server | Notenordner: $folder)\n\n'

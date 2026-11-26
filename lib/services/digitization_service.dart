@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../models/song.dart';
+import 'app_config.dart';
 import 'edition_lookup_service.dart';
 import 'setlist_pdf_service.dart';
 import 'voice_matcher.dart';
@@ -611,7 +612,7 @@ class DigitizationService {
     List<SongDigitizationReport> reports, {
     String? categoryFilter,
     String? instrumentFilter,
-    String orchestraName = 'Blasorchester 1862',
+    String? orchestraName,
   }) async {
     return SetlistPdfService.writeToTempFile(await buildAuditPdf(
       reports,
@@ -627,7 +628,7 @@ class DigitizationService {
     List<SongDigitizationReport> reports, {
     String? categoryFilter,
     String? instrumentFilter,
-    String orchestraName = 'Blasorchester 1862',
+    String? orchestraName,
   }) async {
     final filtered = reports.where((r) {
       if (categoryFilter != null && categoryFilter.isNotEmpty && categoryFilter != 'Alle Kategorien') {
@@ -672,7 +673,7 @@ class DigitizationService {
     final dateStr = DateFormat('dd.MM.yyyy').format(DateTime.now());
     final summary = calculateSummary(reports);
     page.graphics.drawString(
-      '$orchestraName • Stand: $dateStr • Gesamt-Score: ${summary.overallPercentage.round()}% • ${filtered.length} unvollständige Stücke',
+      '${orchestraName ?? AppConfig.clubName} • Stand: $dateStr • Gesamt-Score: ${summary.overallPercentage.round()}% • ${filtered.length} unvollständige Stücke',
       subtitleFont,
       brush: PdfSolidBrush(PdfColor(224, 231, 255)),
       bounds: Rect.fromLTWH(14, 32, pageWidth - 28, 16),

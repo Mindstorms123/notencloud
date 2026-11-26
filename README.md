@@ -2,7 +2,7 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20iPadOS-brightgreen)]()
+[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20iPadOS%20%7C%20Web-brightgreen)]()
 
 **Notencloud** ist eine moderne, native Open-Source Noten-App für Blasorchester, Chöre und Ensembles. Sie verbindet nahtlose **Nextcloud-Synchronisation (WebDAV)** mit **intelligentem Stimmen-Matching**, **Apple Pencil & Stylus-Stiftunterstützung** sowie **benutzerspezifischer Cloud-Sicherung von Notizen**.
 
@@ -41,7 +41,7 @@
 - Erstellung und Verwaltung von Konzert- und Probenprogrammen.
 - Drag & Drop zum Umsortieren von Stücken und Einfügen von Pausen-Markern.
 - Notizen pro Stück (z. B. *„Ohne Wiederholung“*, *„Attacca“*).
-- **Cloud-Synchronisation:** Setlisten werden in `_Setlisten/` synchronisiert und stehen dem gesamten Orchester zur Verfügung.
+- **Cloud-Synchronisation:** Setlisten werden in `_Setlisten/` synchronisiert und stehen dem gesamten Orchester zur Verfügung, sobald dieser Ordner in der Nextcloud für alle freigegeben ist.
 
 ### 🔍 6. Vollbild & Zoom
 - **Doppeltippen-Vollbild:** Ein Doppeltippen auf das Notenblatt schaltet die Leisten aus und maximiert die Noten.
@@ -49,7 +49,29 @@
 
 ---
 
+## 🏛️ Für den eigenen Verein einrichten
+
+Notencloud braucht keinen eigenen Server. Es genügen eine **Nextcloud** (z. B. Hetzner
+Storage Share) für die Noten und ein **einfaches Webhosting mit PHP** für die Web-App:
+
+1. In der Nextcloud die Ordner `Noten` und `_Setlisten` anlegen und für die Mitglieder freigeben.
+2. [`install.php`](https://github.com/Mindstorms123/notencloud/releases/latest/download/install.php)
+   auf das Webhosting laden und im Browser öffnen.
+3. Vereinsname und Nextcloud-Adresse eintragen – das Skript lädt die App und richtet sie ein.
+
+Updates laufen später über dieselbe Seite. Die ganze Anleitung mit Freigaben, Sicherheit
+und Fehlersuche: **[docs/webhosting.md](docs/webhosting.md)**
+
+Noten einscannen und einsortieren lassen – Prompts für Claude und ein Skript, das
+Stapel-Scans in Einzelstimmen teilt: **[docs/digitalisieren-mit-claude.md](docs/digitalisieren-mit-claude.md)**
+
+---
+
 ## 📲 Installation & Updates
+
+### Web-App (iPad, iPhone, PC)
+Die Adresse eures Vereins im Browser öffnen. Auf iPad und iPhone in Safari: *Teilen › Zum Home-Bildschirm* –
+danach startet Notencloud wie eine App und funktioniert auch ohne Internet.
 
 ### Direkt-Update in der App (In-App APK Updater)
 1. Öffne in der App den Tab **Einstellungen**.
@@ -87,7 +109,18 @@ flutter pub get
 
 # Tests ausführen
 flutter test
+test/hosting/run.sh        # Einrichtung und Proxy fürs Webhosting
 ```
+
+### 🌐 Web-Paket bauen
+
+```bash
+scripts/build_web.sh       # → build/notencloud-web.zip, build/install.php
+```
+
+Das Paket ist für jeden Verein dasselbe; die Vereinsdaten schreibt `install.php` auf dem
+Webhosting in `config.json`. Bei jedem veröffentlichten Release hängt GitHub Actions das
+Paket automatisch an.
 
 ---
 
@@ -144,24 +177,25 @@ Für Apple-Geräte (iPhone & iPad) kann Notencloud auf einem Mac gebaut und kost
 
 ## 📁 Empfohlene Ordnerstruktur auf Nextcloud
 
-Damit Notencloud Stücke und Stimmen optimal erkennt:
+Zwei Ordner auf oberster Ebene, beide für die Gruppe der Mitglieder freigegeben
+(Einzelheiten und Rechte: [docs/webhosting.md](docs/webhosting.md#schritt-1--nextcloud-vorbereiten)):
 
 ```text
 Nextcloud/
-└── Notenarchiv/                              <-- Hauptordner in den App-Einstellungen
+├── _Setlisten/                               <-- Setlisten und Vereinsdatei (für alle, mit Schreibrecht)
+│   ├── 2026-12-15_Weihnachtskonzert.json
+│   └── club_config.json
+│
+└── Noten/                                    <-- Notenordner in den App-Einstellungen
     │
-    ├── _Setlisten/                           <-- Zentraler Ordner für Konzertlisten (.json)
-    │   ├── 2026-12-15_Weihnachtskonzert.json
-    │   └── 2027-05-01_Fruehlingskonzert.json
-    │
-    ├── _Notizen/                             <-- Benutzerspezifische Notizen & Eintragungen
+    ├── _Notizen/                             <-- Eintragungen je Mitglied (legt die App an)
     │   ├── musiker_anna/
     │   └── musiker_ben/
     │
-    ├── 01_Aktuelle Noten/                    <-- Standard-Kategorie
-    │   ├── Alte Kameraden/
+    ├── 01_Aktuelle Noten/                    <-- Kategorie
+    │   ├── Alte Kameraden/                   <-- ein Ordner je Stück
     │   │   ├── Partitur.pdf
-    │   │   ├── Flöte 1.pdf
+    │   │   ├── Flöte 1.pdf                   <-- eine PDF je Stimme
     │   │   ├── Klarinette 1 in B.pdf
     │   │   ├── Altsaxophon 1 in Es.pdf
     │   │   ├── Trompete 1 in B.pdf
