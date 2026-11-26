@@ -81,24 +81,68 @@ stehen, bevor `install.php` hochgeladen wird.
 > `index.html` und `.htaccess` ersetzen. `install.php` warnt, wenn der Ordner nicht leer
 > ist, und richtet dann nur nach ausdrücklicher Bestätigung ein.
 
-1. Im Kundenmenü des Webhostings eine **Subdomain** anlegen, z. B. `noten.euer-verein.de`,
-   und ihr einen **eigenen Ordner** zuweisen (z. B. `public_html/noten`).
-   Wer keine Subdomain möchte, legt nur den Unterordner an – die App ist dann unter
-   `euer-verein.de/noten/` erreichbar.
-2. **Nameserver / DNS:**
-   - Liegt die Domain beim selben Anbieter wie das Webhosting (bei Hetzner zum
-     Webhosting gebucht), trägt das Kundenmenü die Subdomain selbst ein – nichts weiter
-     zu tun.
-   - Liegt die Domain woanders, dort einen DNS-Eintrag für `noten` anlegen, der auf das
-     Webhosting zeigt (die Zieladresse nennt das Kundenmenü des Webhostings).
-   - Bis die neue Adresse überall bekannt ist, kann es von ein paar Minuten bis zu
-     einigen Stunden dauern.
-3. Für die Subdomain das **SSL-Zertifikat** (Let’s Encrypt) einschalten. Das klappt
-   erst, wenn die Adresse erreichbar ist.
-4. Eine aktuelle **PHP-Version** wählen (8.x).
-5. Probe: `https://noten.euer-verein.de` im Browser öffnen. Es muss eine leere Seite,
-   eine Ordnerliste oder eine Platzhalterseite des Anbieters kommen – **nicht** eure
-   Vereins-Webseite und keine Zertifikatswarnung.
+### Läuft auf dem Webhosting schon die Vereins-Webseite?
+
+Das ist kein Hindernis – beides läuft nebeneinander auf demselben Paket:
+
+```text
+public_html/              ← Vereins-Webseite   → https://euer-verein.de
+public_html/noten/        ← Notencloud         → https://noten.euer-verein.de
+```
+
+Die Subdomain bekommt **keine eigene IP**. Sie zeigt auf denselben Server wie die
+Vereins-Webseite; der Webserver erkennt am Namen in der Adresse, welchen Ordner er
+ausliefert.
+
+### So geht es (Hetzner konsoleH)
+
+Die Menünamen stammen aus der Hetzner-Dokumentation und können sich ändern; bei
+anderen Anbietern heißen die Punkte ähnlich.
+
+1. **Subdomain anlegen:** In konsoleH die Domain auswählen › *Einstellungen* ›
+   *Subdomains* › neue Subdomain `noten`. Als Verzeichnis einen **eigenen Ordner**
+   angeben, z. B. `public_html/noten` (nicht `public_html` selbst – dort liegt die
+   Vereins-Webseite).
+2. **DNS prüfen** – je nachdem, wo die Domain liegt:
+
+   | Wo liegt die Domain? | Was ist zu tun? |
+   |---|---|
+   | Bei Hetzner, zum selben Webhosting gebucht | In der Regel nichts: Die Subdomain ist über das Webhosting erreichbar. Zur Kontrolle unter *DNS* nachsehen, ob es einen Eintrag für `noten` gibt (oder einen Platzhalter-Eintrag `*`). |
+   | Bei einem anderen Anbieter | Dort einen DNS-Eintrag für `noten` anlegen. Am einfachsten **CNAME** `noten` → `euer-verein.de.` Alternativ ein **A-Eintrag** `noten` mit **derselben IP**, die schon für die Hauptdomain eingetragen ist. |
+
+   Bis ein neuer Eintrag überall bekannt ist, kann es von ein paar Minuten bis zu
+   einigen Stunden dauern.
+3. **SSL-Zertifikat:** *SSL Manager* › *SSL-Accounts* › bei `noten.euer-verein.de` ein
+   kostenloses **Let’s-Encrypt-Zertifikat** beantragen. Die Subdomain erscheint dort
+   erst, nachdem sie angelegt wurde. Danach *HTTPS-Weiterleitung* auf **Ein** stellen.
+4. **PHP-Version:** eine aktuelle wählen (8.x).
+5. **Probe:** `https://noten.euer-verein.de` im Browser öffnen.
+
+   | Was erscheint | Bedeutung |
+   |---|---|
+   | leere Seite, Ordnerliste, „403“ oder Platzhalterseite des Anbieters | richtig – weiter mit Schritt 3 |
+   | die Vereins-Webseite | Die Subdomain zeigt auf den falschen Ordner – in Punkt 1 den eigenen Ordner zuweisen. |
+   | Zertifikatswarnung | Das Zertifikat ist noch nicht ausgestellt – etwas warten (Punkt 3). |
+   | „Seite nicht gefunden“ / keine Verbindung | Der DNS-Eintrag fehlt oder ist noch nicht überall bekannt (Punkt 2). |
+
+### Ohne Subdomain
+
+Wer sich DNS und Zertifikat sparen will, legt nur den Ordner `public_html/noten` an und
+lädt `install.php` dorthin. Die App läuft dann unter `https://euer-verein.de/noten/`
+und nutzt das Zertifikat der Hauptseite.
+
+Haken: Systeme wie WordPress leiten über ihre eigene `.htaccess` unbekannte Adressen auf
+sich um und können `/noten/` abfangen. Zeigt `https://euer-verein.de/noten/install.php`
+eine Seite der Vereins-Webseite statt der Einrichtung, ist das der Fall – dann die
+Subdomain nehmen.
+
+### Eigene Adresse auch für die Nextcloud (freiwillig)
+
+Ein Storage Share ist unter einer Adresse wie `nx12345.your-storageshare.de` erreichbar.
+Wer lieber `cloud.euer-verein.de` hätte, legt dafür einen CNAME auf die Storage-Share-
+Adresse an und trägt die Domain in den Einstellungen des Storage Share ein (Hetzner-
+Dokumentation: „Storage Share › Subdomains“). Für Notencloud ist das nicht nötig – wenn,
+dann **vor** der Einrichtung erledigen und in `install.php` die neue Adresse eintragen.
 
 ## Schritt 3 – App einrichten
 
